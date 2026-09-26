@@ -480,6 +480,12 @@ export function mountTools(ctx: Context, provider: VaultProvider, opts: MountToo
       // 索引是派生工件：写完必须立即重建。否则新页在 index.md 里看不到，而 index.md 正是
       // L1 / index-only 检索的唯一来源——实测曾有一个 capture 出来的页面滞后 12 天不可检索。
       try { rebuildIndex(store) } catch { /* 索引重建失败不影响沉淀结果 */ }
+      // 语义索引同样要跟上：capture 是本库当前的主力写路径（实测 21 页里 8 页来自 agent:capture），
+      // 而它原先没有 schedule——即"词面层搜得到、语义层搜不到"。debounce + 单飞会把连续 capture 合并成一次。
+      try {
+        const root = provider.currentRecord()?.root ?? vaultRootOf(store)
+        refresherFor(root).schedule('wiki_capture')
+      } catch { /* 刷新调度失败不影响沉淀结果 */ }
       return { page: `${cat}/${id}.md`, related, tagAudit: tagHintOf(store) }
     },
   }))

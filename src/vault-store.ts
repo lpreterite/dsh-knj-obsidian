@@ -8,6 +8,8 @@ import type { WikiCategory, WikiPage, WikiTier, ManifestEntry, VaultManifest, Va
 const WIKI_DIR = '.wiki'
 const MANIFEST_FILE = '.manifest.json'
 const CATEGORIES: WikiCategory[] = ['concepts', 'entities', 'references', 'synthesis', 'projects', 'dictionaries', 'tables']
+/** 暂存区目录名（原始材料；不在 CATEGORIES 里，因此天然不被检索）。 */
+export const RAW_DIR = '_raw'
 
 /**
  * 页面 id 的严格 kebab-case 模式（允许 CJK 字符，中文标题页保留语义文件名）：
@@ -182,6 +184,10 @@ export class VaultStore implements VaultProvider {
     // _meta/：治理元数据（受控标签词表等）。与上游 obsidian-wiki 的 _meta/taxonomy.md 同路径，
     // 便于将来直接复用上游 skill；上游 CLI 的 SKIP_DIRS 也已包含 _meta，不会把词表当知识页。
     mkdirSync(join(this.wikiRoot, '_meta'), { recursive: true })
+    // _raw/：原始材料暂存区（保真搬运进来的 md 等，**不参与检索**）。
+    // 上游 obsidian-wiki 同路径同语义（Staging → next ingest promotes them）；
+    // .obsidian 的忽略清单里早已登记 `_raw/`，但 ensure 之前没建它。
+    mkdirSync(this.rawDir(), { recursive: true })
     this.ensureObsidianIgnore()
     const indexFile = join(this.wikiRoot, 'index.md')
     if (!existsSync(indexFile)) {
@@ -393,6 +399,35 @@ export class VaultStore implements VaultProvider {
 
   sha256(text: string): string {
     return createHash('sha256').update(text).digest('hex')
+  }
+
+  /** `_raw/` 暂存区绝对路径：保真搬运的落点，不参与任何检索（白名单只有 7 个正式分类）。 */
+  rawDir(): string {
+    return join(this.wikiRoot, RAW_DIR)
+  }
+
+  /**
+   * 把原始材料落进 `_raw/`：**保真**——调用方给什么就写什么，不解析 frontmatter、不改写正文、
+   * 不判定分类。幂等：同名同内容 → skipped；同名不同内容 → 覆盖（updated）。
+   *
+   * 为什么这条路径不写正式分类：它做的是搬运而不是提炼（无 confidence 判定、无去重织链），
+   * 直接进知识层会稀释检索质量。正式页一律由 wiki_ingest / wiki_capture 产生。
+   */
+  stageRawFile(name: string, text: string): { relPath: string; status: 'imported' | 'updated' | 'skipped' } {
+    if (!SAFE_ID_RE.test(name)) throw new SaveError(400, `invalid raw file name "${name}"`)
+    const relPath = `${RAW_DIR}/${name}.md`
+    const dir = this.rawDir()
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, `${name}.md`)
+    const next = text.replace(/\r\n/g, '\n')
+    if (existsSync(file)) {
+      const prior = readFileSync(file, 'utf8')
+      if (prior === next) return { relPath, status: 'skipped' }
+      writeFileSync(file, next, 'utf8')
+      return { relPath, status: 'updated' }
+    }
+    writeFileSync(file, next, 'utf8')
+    return { relPath, status: 'imported' }
   }
 
   private manifestFile(): string {

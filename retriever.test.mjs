@@ -269,3 +269,59 @@ test('中文 bigram 不改变短查询与英文查询的既有行为', (t) => {
   assert.equal(h2.matchedBy, 'title')
   assert.equal(h2.score, 6)
 })
+
+// ---------------------------------------------------------------------------
+// 兼容口径（2026-09-21 对抗审查后补）：原条款写成「327 例必须继续全绿、不得改变既有分数」，
+// 与「中文问句必须能召回」自相矛盾（后者必然改变 ≥3 字中文的分数与排序）。
+// 因此把承诺改成可检验的形式——**未截断层面命中集只增不减**：
+//   参照实现 = 改动前的词面规则（整串大小写不敏感 includes，扫 title/tags/summary/body）。
+//   不变量   = 参照实现命中的每一页，都必须仍在新实现的候选里（bigram 只增加召回）。
+// ⚠️ 截断层不保证：默认 maxCandidates 小时，成员资格会随排序变化而变化。真实库实测
+//    「知识库怎么触发检索」的 top-3 从 {dsh-knj-plugins, dsh-plugin-dev-pitfalls,
+//    wiki-retrieval-trigger-layer} 变成 {wiki-retrieval-trigger-layer, dsh-knj-plugins,
+//    dsh-session-persistence}——成员确实换了一个，但那是**截断**造成的，不是召回丢失。
+//    这条口径必须写在断言旁边，否则下一个人会把它当成回归。
+// ---------------------------------------------------------------------------
+
+/** 参照实现：改动前的词面层规则（整串子串命中）。 */
+function oldFrontLayerIds(store, query) {
+  const q = query.toLowerCase()
+  const ids = []
+  for (const listed of store.listPages()) {
+    const page = store.readPage(listed.id, listed.category)
+    if (!page) continue
+    const hay = [page.title ?? '', (page.tags ?? []).join(' '), page.summary ?? '', page.body ?? '']
+      .join('\n').toLowerCase()
+    if (hay.includes(q)) ids.push(page.id)
+  }
+  return ids
+}
+
+test('中文 bigram 只增加召回：≥3 字中文查询的**未截断命中集**只增不减', (t) => {
+  const { dir, store } = makeVault()
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const now = '2026-08-25T00:00:00.000Z'
+  // ① 含整串的页（改动前就该命中）② 只含 bigram 组合、不含整串的页（改动后新增召回）③ 无关页
+  store.writePage({ id: 'cron-tz', title: 'Cron 时区被强制成 UTC', category: 'references', tags: ['dsh', 'cron'], source: 's', confidence: 'extracted', created: now, updated: now, body: '定时任务没触发时区设置：dsh-scheduler 的 cron 表达式按 UTC 解释。' })
+  store.writePage({ id: 'wiki-trigger', title: '知识库检索触发层', category: 'projects', tags: ['dsh'], source: 's', confidence: 'extracted', created: now, updated: now, body: '任务级提醒与索引优先策略。' })
+  store.writePage({ id: 'image-size', title: '图片尺寸处理', category: 'concepts', tags: [], source: 's', confidence: 'extracted', created: now, updated: now, body: '800x600 缩放。' })
+
+  for (const query of ['定时任务没触发时区设置', '知识库怎么触发检索', 'Cron 时区']) {
+    const oldIds = oldFrontLayerIds(store, query)
+    const newIds = retrieve(store, query, { maxCandidates: 100 }).candidates.map((c) => c.id)
+    assert.ok(oldIds.length > 0 || query === '知识库怎么触发检索', `参照实现应对「${query}」有命中（否则这条断言是空转）`)
+    for (const id of oldIds) {
+      assert.ok(newIds.includes(id), `「${query}」改动前命中的 ${id} 不得丢失（分词只增召回）`)
+    }
+    // 截断层：截断结果必须是未截断结果的子集（成员可换，但不得凭空出现）
+    const top3 = retrieve(store, query, { maxCandidates: 3 }).candidates.map((c) => c.id)
+    for (const id of top3) assert.ok(newIds.includes(id), '截断结果必须是未截断结果的子集')
+  }
+
+  // 召回确实变宽（证明上一段不是恒真）：整串规则漏掉的那页，新实现能召回
+  const q = '知识库怎么触发检索'
+  assert.ok(!oldFrontLayerIds(store, q).includes('wiki-trigger'), '前提：参照实现漏掉该页（标题里没有「怎么」）')
+  const newIds = retrieve(store, q, { maxCandidates: 100 }).candidates.map((c) => c.id)
+  assert.ok(newIds.includes('wiki-trigger'), '新实现必须召回参照实现漏掉的那页——这才是「只增」的实证')
+  assert.ok(!newIds.includes('image-size'), '无关页仍然不得被召回（只增召回 ≠ 什么都召回）')
+})

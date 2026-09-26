@@ -250,6 +250,13 @@ test('wiki_ingest 落盘后安排语义索引刷新（source 契约：schedule �
   assert.match(src, /refresherFor\(root\)\.schedule\('wiki_ingest'\)/, '入库后应安排 debounce 刷新')
 })
 
+test('wiki_capture 落盘后同样安排语义索引刷新（原先漏了：capture 是当前主力写路径）', () => {
+  const ROOT = fileURLToPath(new URL('.', import.meta.url))
+  const src = readFileSync(join(ROOT, 'src/tools.ts'), 'utf8')
+  assert.match(src, /refresherFor\(root\)\.schedule\('wiki_capture'\)/,
+    'capture 直接 writePage，不补这一行就只有词面层能看到它（语义层搜不到）')
+})
+
 test('打包契约：@tobilu/qmd 是可选依赖（内网仓库缺它时插件仍能装上并降级）', () => {
   const ROOT = fileURLToPath(new URL('.', import.meta.url))
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))

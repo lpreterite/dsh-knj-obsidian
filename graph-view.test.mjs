@@ -44,8 +44,29 @@ test('GraphView 用户内容一律经 esc() 转义——含 <script> 的标题�
   assert.match(text, /data-id="\$\{esc\(n\.id\)\}"/, 'data-id 属性须经 esc()')
   assert.match(text, /data-category="\$\{esc\(n\.category\)\}"/, 'data-category 属性须经 esc()')
   assert.match(text, /data-title="\$\{esc\(n\.title\)\}"/, 'data-title 属性须经 esc()')
-  assert.match(text, />\$\{esc\(n\.title\)\}<\/text>/, 'text 节点内容须经 esc()')
+  // 标签文案可被 placeLabels 截断（label），未截断时回落 title；两者都必须 esc()
+  assert.match(text, /const label = n\.label \?\? n\.title/, '标签取 n.label 并回落 n.title')
+  assert.match(text, />\$\{esc\(label\)\}<\/text>/, 'text 节点内容须经 esc()')
+  assert.match(text, /<title>\$\{esc\(n\.title\)\}<\/title>/, '悬停完整标题须经 esc()')
   // 未经 esc() 的裸插值即注入面（坐标 x/y 为纯数字，不受此限）
   assert.doesNotMatch(text, /\$\{n\.(id|title|category)\}/, 'id/title/category 不得裸插值')
   assert.doesNotMatch(text, /\$\{n\.(id|title|category)\?/, '同上（含可选链形态）')
+})
+
+test('GraphView 布局收敛后铺开并选边标签（面板空间利用三步中的 ①②）', () => {
+  const gv = join(ROOT, 'src/client/GraphView.tsx')
+  const text = readFileSync(gv, 'utf8')
+  assert.match(text, /spreadToFill\(nodes, W, H\)/, '布局结束后应调用 spreadToFill 铺满面板')
+  assert.match(text, /placeLabels\(nodes, W, H, measureLabel\)/, '铺开后应选边/截断标签')
+  // 两步必须在「最后一帧」执行（写在 raf 续帧那行之后，即 else 收敛分支里），
+  // 否则力场会把铺开的结果又拉回去；铺开+选边之后必须重绘一次。
+  const firstRaf = text.indexOf('raf = requestAnimationFrame(tick)')
+  const settle = text.indexOf('spreadToFill(nodes, W, H)')
+  const labels = text.indexOf('placeLabels(nodes, W, H, measureLabel)')
+  const repaint = text.indexOf('paint()', labels)
+  assert.ok(firstRaf > 0 && settle > firstRaf, '铺开须写在收敛分支（raf 续帧那行之后）')
+  assert.ok(labels > settle, '先铺开坐标、再定标签侧别')
+  assert.ok(repaint > labels, '选边/截断后须重绘以生效')
+  // 侧别决定 text-anchor：左侧标签向右对齐，右侧标签向左对齐（否则文字会压回圆上）
+  assert.match(text, /text-anchor="\$\{side === 'left' \? 'end' : 'start'\}"/, 'text-anchor 须按标签侧别选择')
 })

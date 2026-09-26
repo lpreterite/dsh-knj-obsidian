@@ -6,6 +6,7 @@ import { VaultManager } from './vault-manager.ts'
 import { mountTools } from './tools.ts'
 import { mountWikiRoutes, type WikiHost } from './routes.ts'
 import { installTrigger, type TriggerHost } from './trigger.ts'
+import { mountSkillProvider } from './skill-provider.ts'
 
 export const name = 'dsh-knj-obsidian'
 
@@ -27,6 +28,11 @@ function defaultRegistryPath(): string {
 }
 
 export function apply(ctx: Context, config?: Config): void {
+  // skill 注册：包内 5 个 skill 只有注册过才进模型 catalog（详见 src/skill-provider.ts）。
+  // 刻意用**独立的** ctx.inject(['skills'])：'skills' 绝不并入下面那支 inject——
+  // 硬依赖缺失会让该 entry 置 INACTIVE，连带 tools/routes/trigger 一起静默失效；
+  // 独立注入最坏只是 skill 不可见（provider 内部还会吞掉异常）。
+  const disposeSkills = mountSkillProvider(ctx)
   // ⚠️ workspaceRegistry 是「可选」依赖，绝不能写进 inject 数组：cordis 对硬依赖缺失的
   // entry 置 INACTIVE，回调永不执行——routes 和 tools 会整体静默失效（宿主改名/移除该服务时）。
   // tools/webServer 由官方 base bundles 保证提供，是安全的核心依赖。
@@ -55,6 +61,7 @@ export function apply(ctx: Context, config?: Config): void {
       disposeTools()
       disposeRoutes()
       disposeTrigger()
+      disposeSkills()
     }
   })
 }

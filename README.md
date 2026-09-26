@@ -264,6 +264,14 @@ v9 把「本地工程代码 → 知识页」做成 **agent 会话驱动**的采�
   枚举/常量（→ dictionaries）与 SQL DDL/MyBatis/JPA 表结构（→ tables）并对账存量知识
   （new/changed/unchanged/deleted + 同名近似页提醒），蒸馏后经 `wiki_ingest` 直接入库
   （contentHash 增量跳过、未知/推断保持 unknown/inferred、不覆盖他源页面、不读会话归档）
+- **skill 注册（v2026.9.220 起）**：包内 5 个 skill（`wiki-collect` / `wiki-mine` / `wiki-distill` /
+  `wiki-init` / `wiki-query`）经插件内的 skill provider 注册进宿主 skill registry
+  （`src/skill-provider.ts`，rank = `BUNDLED_SKILL_RANK` 600）。600 低于项目根(100)与用户根
+  （`~/.dsh/skills`，400），因此**本地/项目里的同名副本优先，包内版本做兜底**且随插件升级自动更新。
+  在此之前这些 skill 只随包分发、从未注册：宿主 filesystem provider 只扫 5 个本地根且不发现嵌套
+  `**/SKILL.md`，所以模型 catalog 里根本看不到它们（GUI 触发指令把规则内联进提示词，功能"看着能用"，
+  skill 本体却不可见）。注册是**静默降级**的：单个 SKILL.md 缺失/解析失败只跳过该条并 warn，
+  `skills` 服务缺失时也不影响 `wiki_*` 工具、路由与触发钩子
 - **GUI 启动器（知识蒸馏）**：边栏「知识库」→「知识蒸馏」分段——五个选项：**枚举/常量字典**、
   **表结构**、**系统功能挖掘**（**预留位**：将由 3 个 skill 组合完成——代码结构 → 关系/调用 →
   功能聚合，本机暂未安装；选中时标注「预留」并禁用动作，不生成会失败的指令；

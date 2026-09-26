@@ -1,11 +1,23 @@
-// importer.test.mjs — md 路径导入（先红后绿）
+// importer.test.mjs — md 路径导入：保真搬运到 _raw/ 暂存区（2026-09-20 契约变更）
+//
+// 变更理由（实测 + 上游背书）：
+//  1) 实测：4 个库 26 页里 source=import:* 的页面 **0 条**——这条路径从未产出过知识页；
+//  2) 语义：它做的是"保真搬运"，而知识层要的是"LLM 提炼"；直接把未提炼内容写进 7 个正式分类
+//     会稀释检索质量（长页多主题稀释嵌入已实测），且没有 confidence 判定、没有去重织链；
+//  3) 上游模型本来就是这么设计的：obsidian-wiki 的 `_raw/` = Staging（"next ingest promotes them"），
+//     且参考文档明确警告"草稿被当成正式知识检索/引用"的风险。
+//
+// 新契约：导入 = 把原文**逐字节保真**落到 `<wiki>/_raw/`（不改写 frontmatter、不剥标题、不判定分类）。
+// `_raw/` 在构造上不可检索（RETRIEVAL_CATEGORIES 只有 7 类，语义索引 pattern 也只匹配那 7 类），
+// 因此暂存内容不会污染 L1 / wiki_query / 语义检索；正式页仍由 wiki_ingest 产生。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { VaultStore } from './lib/vault-store.js'
 import { importPath } from './lib/importer.js'
+import { retrieve } from './lib/retriever.js'
 
 function makeSrcDir() {
   return mkdtempSync(join(tmpdir(), 'dsh-obsidian-src-'))
@@ -16,20 +28,35 @@ function makeVault() {
   store.ensure()
   return { dir, store }
 }
-const PAGE = (over = {}) => ({ tags: [], source: 't', confidence: 'extracted', created: '2026-08-26T00:00:00.000Z', updated: '2026-08-26T00:00:00.000Z', id: 'x', title: 'X', category: 'references', body: 'b', ...over })
+const rawPath = (dir, name) => join(dir, '.wiki', '_raw', name)
 
-test('单文件无 frontmatter：自动补全（id=文件名净化、title=首个标题、category=参数、source=import:路径）', () => {
+test('单文件：保真落到 _raw/（不解析 frontmatter、不剥标题、不判定分类）', () => {
   const src = makeSrcDir()
   const { dir, store } = makeVault()
   try {
-    writeFileSync(join(src, 'my-note.md'), '# 我的笔记\n\n正文第一段。\n', 'utf8')
+    const text = '# 我的笔记\n\n正文第一段。\n'
+    writeFileSync(join(src, 'my-note.md'), text, 'utf8')
     const r = importPath(store, join(src, 'my-note.md'), 'references')
+
     assert.equal(r.imported, 1)
-    const p = store.readPage('my-note', 'references')
-    assert.ok(p, '应入 references')
-    assert.equal(p.title, '我的笔记')
-    assert.equal(p.body, '正文第一段。')
-    assert.ok(p.source.startsWith('import:'), 'source 标记 import:')
+    assert.equal(r.files[0].staged, '_raw/my-note.md')
+    assert.ok(existsSync(rawPath(dir, 'my-note.md')), '应落在 _raw/')
+    assert.equal(readFileSync(rawPath(dir, 'my-note.md'), 'utf8'), text, '原文逐字节保真（含 # 标题）')
+    assert.equal(store.readPage('my-note', 'references'), null, '不得写进正式分类')
+    assert.match(r.hint, /_raw|暂存/, '必须提示这是暂存、需蒸馏成正式页')
+  } finally { rmSync(src, { recursive: true, force: true }); rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('带合法 frontmatter 的文件同样原样暂存（不再按声明 id/category 入库）', () => {
+  const src = makeSrcDir()
+  const { dir, store } = makeVault()
+  try {
+    const fm = ['---', 'id: existing-page', 'title: 已有页', 'category: concepts', 'tags: [keep]', '---', '', '原有正文', ''].join('\n')
+    writeFileSync(join(src, 'whatever-name.md'), fm, 'utf8')
+    const r = importPath(store, src, 'references')
+    assert.equal(r.imported, 1)
+    assert.equal(readFileSync(rawPath(dir, 'whatever-name.md'), 'utf8'), fm, 'frontmatter 原样保留（保真是这条路径的唯一职责）')
+    assert.equal(store.readPage('existing-page', 'concepts'), null, '不得按 frontmatter 声明入库')
   } finally { rmSync(src, { recursive: true, force: true }); rmSync(dir, { recursive: true, force: true }) }
 })
 
@@ -45,60 +72,41 @@ test('目录递归：收集嵌套 md，排除 node_modules/.git/target；源文�
     const before = readFileSync(join(src, 'a.md'), 'utf8')
     const r = importPath(store, src, 'references')
     assert.equal(r.imported, 2, JSON.stringify(r.files))
-    assert.ok(!r.files.some((f) => f.id?.includes('skip')), '排除 node_modules')
+    assert.ok(!r.files.some((f) => f.staged.includes('skip')), '排除 node_modules')
     assert.equal(readFileSync(join(src, 'a.md'), 'utf8'), before, '源文件不变')
-    assert.ok(store.readPage('a', 'references') && store.readPage('b', 'references'))
+    assert.ok(existsSync(rawPath(dir, 'a.md')) && existsSync(rawPath(dir, 'b.md')))
   } finally { rmSync(src, { recursive: true, force: true }); rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('已有合法 frontmatter：按声明的 id/category 原样入库', () => {
-  const src = makeSrcDir()
-  const { dir, store } = makeVault()
-  try {
-    const fm = ['---', 'id: existing-page', 'title: 已有页', 'category: concepts', 'tags: [keep]', 'source: orig', 'confidence: extracted', 'created: 2026-01-01', 'updated: 2026-01-01', '---', '', '原有正文', ''].join('\n')
-    writeFileSync(join(src, 'whatever-name.md'), fm, 'utf8')
-    const r = importPath(store, src, 'references')
-    assert.equal(r.imported, 1)
-    const p = store.readPage('existing-page', 'concepts')
-    assert.ok(p, '按声明 category 入库')
-    assert.equal(p.source, 'orig', '保留原 source')
-    assert.equal(p.tags[0], 'keep')
-  } finally { rmSync(src, { recursive: true, force: true }); rmSync(dir, { recursive: true, force: true }) }
-})
-
-test('id 冲突：已有同名页时新文件加 -2 后缀，不覆盖', () => {
-  const src = makeSrcDir()
-  const { dir, store } = makeVault()
-  try {
-    store.writePage(PAGE({ id: 'a', title: '库内原页', body: '原内容' }))
-    writeFileSync(join(src, 'a.md'), '新内容', 'utf8')
-    const r = importPath(store, src, 'references')
-    assert.equal(r.imported, 1)
-    const orig = store.readPage('a', 'references')
-    assert.equal(orig.body, '原内容', '原页不被覆盖')
-    const dup = store.readPage('a-2', 'references')
-    assert.ok(dup, '新页用 a-2')
-    assert.equal(dup.body, '新内容')
-    assert.ok(r.files.find((f) => f.id === 'a-2' && f.renamed), '结果注明改名')
-  } finally { rmSync(src, { recursive: true, force: true }); rmSync(dir, { recursive: true, force: true }) }
-})
-
-test('幂等：未修改重导 → skipped，磁盘不变；修改后重导 → updated', () => {
+test('幂等与更新：同名同内容→skipped 且磁盘不变；同名不同内容→updated 覆盖', () => {
   const src = makeSrcDir()
   const { dir, store } = makeVault()
   try {
     writeFileSync(join(src, 'same.md'), '初始内容', 'utf8')
     importPath(store, src, 'references')
-    const diskBefore = readFileSync(join(dir, '.wiki', 'references', 'same.md'), 'utf8')
+    const before = readFileSync(rawPath(dir, 'same.md'), 'utf8')
+
     const r2 = importPath(store, src, 'references')
-    assert.equal(r2.skipped, 1, '重导跳过')
+    assert.equal(r2.skipped, 1, '未修改重导应跳过')
     assert.equal(r2.imported, 0)
-    assert.equal(readFileSync(join(dir, '.wiki', 'references', 'same.md'), 'utf8'), diskBefore, '磁盘未变')
+    assert.equal(readFileSync(rawPath(dir, 'same.md'), 'utf8'), before, '磁盘未变')
 
     writeFileSync(join(src, 'same.md'), '改过的内容', 'utf8')
     const r3 = importPath(store, src, 'references')
     assert.equal(r3.updated, 1, '内容变化按更新处理')
-    assert.equal(store.readPage('same', 'references').body, '改过的内容')
+    assert.equal(readFileSync(rawPath(dir, 'same.md'), 'utf8'), '改过的内容')
+  } finally { rmSync(src, { recursive: true, force: true }); rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('暂存内容不可检索：_raw/ 不进 L1/wiki_query（构造上被白名单排除）', () => {
+  const src = makeSrcDir()
+  const { dir, store } = makeVault()
+  try {
+    writeFileSync(join(src, 'secret-draft.md'), '# 限流算法草稿\n\n退避抖动尚未整理。\n', 'utf8')
+    importPath(store, src, 'references')
+
+    assert.equal(store.listPagesReadonly().length, 0, '_raw 不出现在页面清单里')
+    assert.deepEqual(retrieve(store, '限流算法草稿').candidates, [], '检索不得命中暂存内容')
   } finally { rmSync(src, { recursive: true, force: true }); rmSync(dir, { recursive: true, force: true }) }
 })
 
@@ -109,11 +117,9 @@ test('超限拒绝：单文件 >1MB 或总数 >500 → 整体失败，无部分�
     writeFileSync(join(src, 'big.md'), 'x'.repeat(1024 * 1024 + 10), 'utf8')
     assert.throws(() => importPath(store, src, 'references'), /超过|1MB|limit/i, '超 1MB 报错')
     writeFileSync(join(src, 'big.md'), 'x'.repeat(100), 'utf8')
-    // 造 501 个小文件
     for (let i = 0; i < 501; i++) writeFileSync(join(src, `f${i}.md`), `内容${i}`, 'utf8')
     assert.throws(() => importPath(store, src, 'references'), /500|超过|limit/i, '超数量报错')
-    // 无部分写入：库里没有任何 f*.md
-    assert.ok(!store.readPage('f0', 'references') && !store.readPage('big', 'references'), '无部分写入')
+    assert.ok(!existsSync(rawPath(dir, 'big.md')) && !existsSync(rawPath(dir, 'f0.md')), '无部分写入')
   } finally { rmSync(src, { recursive: true, force: true }); rmSync(dir, { recursive: true, force: true }) }
 })
 

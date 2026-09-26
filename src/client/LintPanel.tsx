@@ -69,11 +69,11 @@ export function LintPanel({ openNote }: { openNote: (id: string, category: strin
     try {
       const r = await importMd(p, importCategory)
       const parts = [
-        r.imported ? `导入 ${r.imported}` : null,
+        r.imported ? `暂存 ${r.imported}` : null,
         r.updated ? `更新 ${r.updated}` : null,
         r.skipped ? `跳过 ${r.skipped}` : null,
       ].filter(Boolean)
-      flash(parts.length ? parts.join('，') : '没有可导入的文件')
+      flash(parts.length ? `${parts.join('，')}（落 ${r.stagedDir ?? '_raw'}/，未提炼）` : '没有可导入的文件')
       window.dispatchEvent(new CustomEvent('wiki:pages-changed'))
     } catch (e) {
       flash(`导入失败：${e instanceof Error ? e.message : String(e)}`, 'err')
@@ -99,19 +99,19 @@ export function LintPanel({ openNote }: { openNote: (id: string, category: strin
         </button>
       </div>
       <div className="knj-pop__row">
-        <span className="knj-section-title"><IconImport size={13} />快速导入（直接写入）</span>
+        <span className="knj-section-title"><IconImport size={13} />快速导入（保真暂存 → _raw/）</span>
       </div>
-      <div className="knj-pop__hint" style={{ color: 'var(--knj-warn)' }}>直接写入，跳过受审阅流程与哈希校验；如需先审阅请用「采集」视图。</div>
+      <div className="knj-pop__hint" style={{ color: 'var(--knj-warn)' }}>只做保真搬运：原文原样落到 _raw/ 暂存区，<strong>不提炼、不参与检索</strong>。让 agent 从 _raw/ 蒸馏成正式页后才会被检索到。</div>
       <div className="knj-pop__row">
         <input className="knj-input" value={importPathInput}
           onChange={(e) => setImportPathInput(e.target.value)}
           placeholder="md 文件或目录路径" spellCheck={false} />
         <select className="knj-select" style={{ width: 76, flexShrink: 0 }} value={importCategory}
-          onChange={(e) => setImportCategory(e.target.value)} title='导入分类'>
+          onChange={(e) => setImportCategory(e.target.value)} title='建议分类（仅供蒸馏参考，不决定落点）'>
           {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>
         <button type='button' className="knj-btn knj-btn--primary" disabled={busy === 'import'} onClick={doImport}>
-          <IconImport size={14} />{busy === 'import' ? '导入中…' : '直接导入'}
+          <IconImport size={14} />{busy === 'import' ? '导入中…' : '导入到暂存区'}
         </button>
       </div>
       <div className="knj-pop__hint">重建索引会重新生成 index.md；蒸馏入口在边栏分段「知识蒸馏」。</div>

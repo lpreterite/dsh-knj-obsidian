@@ -596,11 +596,11 @@ window.__ModuleLoader__.load({
 				try {
 					const r = await importMd(p, importCategory);
 					const parts = [
-						r.imported ? `导入 ${r.imported}` : null,
+						r.imported ? `暂存 ${r.imported}` : null,
 						r.updated ? `更新 ${r.updated}` : null,
 						r.skipped ? `跳过 ${r.skipped}` : null
 					].filter(Boolean);
-					flash(parts.length ? parts.join("，") : "没有可导入的文件");
+					flash(parts.length ? `${parts.join("，")}（落 ${r.stagedDir ?? "_raw"}/，未提炼）` : "没有可导入的文件");
 					window.dispatchEvent(new CustomEvent("wiki:pages-changed"));
 				} catch (e) {
 					flash(`导入失败：${e instanceof Error ? e.message : String(e)}`, "err");
@@ -638,13 +638,17 @@ window.__ModuleLoader__.load({
 							className: "knj-pop__row",
 							children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 								className: "knj-section-title",
-								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconImport, { size: 13 }), "快速导入（直接写入）"]
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconImport, { size: 13 }), "快速导入（保真暂存 → _raw/）"]
 							})
 						}),
-						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 							className: "knj-pop__hint",
 							style: { color: "var(--knj-warn)" },
-							children: "直接写入，跳过受审阅流程与哈希校验；如需先审阅请用「采集」视图。"
+							children: [
+								"只做保真搬运：原文原样落到 _raw/ 暂存区，",
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "不提炼、不参与检索" }),
+								"。让 agent 从 _raw/ 蒸馏成正式页后才会被检索到。"
+							]
 						}),
 						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 							className: "knj-pop__row",
@@ -664,7 +668,7 @@ window.__ModuleLoader__.load({
 									},
 									value: importCategory,
 									onChange: (e) => setImportCategory(e.target.value),
-									title: "导入分类",
+									title: "建议分类（仅供蒸馏参考，不决定落点）",
 									children: CATEGORIES.map((c) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("option", {
 										value: c.value,
 										children: c.label
@@ -675,7 +679,7 @@ window.__ModuleLoader__.load({
 									className: "knj-btn knj-btn--primary",
 									disabled: busy === "import",
 									onClick: doImport,
-									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconImport, { size: 14 }), busy === "import" ? "导入中…" : "直接导入"]
+									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconImport, { size: 14 }), busy === "import" ? "导入中…" : "导入到暂存区"]
 								})
 							]
 						}),
@@ -5063,6 +5067,85 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 				return SAFE_IMG_SRC_RE.test(url) || !hasScheme ? `<img src="${url}" alt="${alt}">` : alt;
 			}).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/~~([^~]+)~~/g, "<del>$1</del>");
 		}
+		/** 铺开限幅：与现状相比最多铺开/收拢到这个倍数，避免极端面板把图拉散或压扁。 */
+		const MAX_SPREAD = 1.8;
+		const MIN_SPREAD = .6;
+		/** 少于这个宽度就不再画标签（仅为保证「绝不越界」这条不变量）。 */
+		const MIN_LABEL_ROOM = 16;
+		/**
+		* 文本宽度估算（无 DOM 环境用；浏览器里应传入 canvas measureText 的精确实现）。
+		* 口径：CJK 每字 ≈ 11px（字号 11px），其余字符 ≈ 6.2px。
+		*/
+		function labelWidth(text) {
+			let w = 0;
+			for (const ch of String(text ?? "")) w += /[\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(ch) ? 11 : 6.2;
+			return w;
+		}
+		/** 截断到不超过 maxW（末尾加 …）；保证「截断后一定 ≤ maxW」这条不变量。 */
+		function truncateTo(text, maxW, measure = labelWidth) {
+			if (maxW < MIN_LABEL_ROOM) return "";
+			if (measure(text) <= maxW) return text;
+			const chars = [...text];
+			for (let n = chars.length - 1; n >= 1; n -= 1) {
+				const candidate = chars.slice(0, n).join("") + "…";
+				if (measure(candidate) <= maxW) return candidate;
+			}
+			return "…";
+		}
+		/**
+		* ① 标签选边 + 按该侧可用宽度截断。
+		* 返回被截断的条数（供 UI/测试观察）。
+		*/
+		function placeLabels(nodes, width, height, measure = labelWidth) {
+			let truncated = 0;
+			for (const n of nodes) {
+				const rightRoom = width - 16 - (n.x + 12);
+				const leftRoom = n.x - 12 - 16;
+				const side = rightRoom >= leftRoom ? "right" : "left";
+				const room = Math.max(0, side === "right" ? rightRoom : leftRoom);
+				n.side = side;
+				if (measure(n.title) <= room) {
+					n.label = n.title;
+					continue;
+				}
+				n.label = truncateTo(n.title, room, measure);
+				truncated += 1;
+			}
+			return { truncated };
+		}
+		/**
+		* ② 把节点坐标按轴铺进可用矩形（只改坐标；限幅 [MIN_SPREAD, MAX_SPREAD]）。
+		* 面板本来就填满时应返回 1（不做无谓抖动）；空数组/零跨度安全返回 1。
+		*/
+		function spreadToFill(nodes, width, height) {
+			if (nodes.length === 0) return {
+				kx: 1,
+				ky: 1
+			};
+			let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+			for (const n of nodes) {
+				x0 = Math.min(x0, n.x);
+				x1 = Math.max(x1, n.x);
+				y0 = Math.min(y0, n.y);
+				y1 = Math.max(y1, n.y);
+			}
+			const spanX = x1 - x0, spanY = y1 - y0;
+			const availW = width - 32 - 16;
+			const availH = height - 32 - 16;
+			const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+			const kx = spanX > 1 ? Math.max(MIN_SPREAD, Math.min(MAX_SPREAD, availW / spanX)) : 1;
+			const ky = spanY > 1 ? Math.max(MIN_SPREAD, Math.min(MAX_SPREAD, availH / spanY)) : 1;
+			for (const n of nodes) {
+				n.x = cx + (n.x - cx) * kx;
+				n.y = cy + (n.y - cy) * ky;
+				n.x = Math.max(24, Math.min(width - 16 - 8, n.x));
+				n.y = Math.max(24, Math.min(height - 16 - 8, n.y));
+			}
+			return {
+				kx,
+				ky
+			};
+		}
 		//#endregion
 		//#region src/client/GraphView.tsx
 		/**
@@ -5098,6 +5181,17 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			dictionaries: "字典",
 			tables: "数据结构"
 		};
+		/** 浏览器里用 canvas 实测标签宽度；无 canvas 时退回 graph-layout 的估算口径（Node 测试用同一口径）。 */
+		function makeLabelMeasurer() {
+			try {
+				const ctx = document.createElement("canvas").getContext("2d");
+				if (!ctx) return labelWidth;
+				ctx.font = "11px system-ui, -apple-system, \"Segoe UI\", sans-serif";
+				return (t) => ctx.measureText(t).width;
+			} catch {
+				return labelWidth;
+			}
+		}
 		function layoutParams(n) {
 			if (n > 1200) return {
 				frameLimit: 60,
@@ -5236,15 +5330,25 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 					paint();
 					frame++;
 					if (frame < frameLimit) raf = requestAnimationFrame(tick);
+					else {
+						spreadToFill(nodes, W, H);
+						placeLabels(nodes, W, H, measureLabel);
+						paint();
+					}
 				};
+				const measureLabel = makeLabelMeasurer();
 				const paint = () => {
 					let out = "";
 					for (const e of edges) out += `<line x1="${e.a.x}" y1="${e.a.y}" x2="${e.b.x}" y2="${e.b.y}" class="knj-graph-edge${e.broken ? " knj-graph-edge--broken" : ""}" stroke-width="1.5"/>`;
 					for (const n of nodes) {
 						const cls = orphans.has(n.id) ? "knj-graph-node--orphan" : CATEGORY_CLASS[n.category] ?? "knj-graph-node--muted";
+						const side = n.side ?? "right";
+						const label = n.label ?? n.title;
+						const lx = side === "left" ? n.x - 12 : n.x + 12;
 						out += `<g data-id="${esc(n.id)}" data-category="${esc(n.category)}" data-title="${esc(n.title)}" style="cursor:pointer">`;
+						out += `<title>${esc(n.title)}</title>`;
 						out += `<circle cx="${n.x}" cy="${n.y}" r="8" class="knj-graph-node ${cls}"/>`;
-						out += `<text x="${n.x + 12}" y="${n.y + 4}" class="knj-graph-label">${esc(n.title)}</text>`;
+						out += `<text x="${lx}" y="${n.y + 4}" class="knj-graph-label" text-anchor="${side === "left" ? "end" : "start"}">${esc(label)}</text>`;
 						out += `</g>`;
 					}
 					svg.innerHTML = out;

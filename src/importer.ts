@@ -1,19 +1,29 @@
 // src/importer.ts
-// 路径导入：递归收集 .md → frontmatter 判定/补全 → 幂等写入 vault。
-// 安全模型：源文件只读；写入落点经 SAFE_ID_RE 净化 + vault 包含性双重校验（writePage 内建）。
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { createHash } from 'node:crypto'
-import { join, basename } from 'node:path'
+// 路径导入 = **保真搬运**到 `<wiki>/_raw/` 暂存区。
+//
+// 2026-09-20 契约变更（原实现：解析 frontmatter → 写入 7 个正式分类）：
+//   1) 实测证据：4 个库 26 页里 `source: import:*` 的页面 **0 条**——这条路径从未产出过知识页；
+//   2) 语义理由：它做的是搬运，而知识层要的是提炼（无 confidence 判定、无去重织链）；
+//      未提炼内容直接进正式分类会稀释检索质量（长页多主题稀释嵌入已实测）。
+//   3) 上游模型本就如此：obsidian-wiki 的 `_raw/` = Staging（"next ingest promotes them"），
+//      参考文档并明确警告"草稿被当成正式知识检索/引用"的风险。
+//   本仓的语义索引 pattern 是**白名单**（只匹配 7 个正式分类），所以 `_raw/` 天然不可检索，
+//   不需要上游那种 ignore 补丁。
+//
+// 保真 = 调用方给什么就写什么：不解析 frontmatter、不剥首标题、不判定分类。
+// 安全模型不变：源文件只读；落点名经 SAFE_ID_RE 校验（VaultStore.stageRawFile 内建）。
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { basename, join } from 'node:path'
 import type { VaultStore } from './vault-store.ts'
-import { parsePageText, SAFE_ID_RE, SaveError } from './vault-store.ts'
-import type { WikiCategory, WikiPage } from './types.ts'
+import { RAW_DIR, SaveError } from './vault-store.ts'
+import type { WikiCategory } from './types.ts'
 
 export interface ImportFileResult {
+  /** 源文件绝对路径（只读；用于用户核对）。 */
   source: string
-  id: string
-  category: WikiCategory
+  /** 暂存落点，相对 `.wiki`（如 `_raw/my-note.md`）。 */
+  staged: string
   status: 'imported' | 'updated' | 'skipped'
-  renamed?: boolean
 }
 
 export interface ImportReport {
@@ -21,6 +31,10 @@ export interface ImportReport {
   updated: number
   skipped: number
   files: ImportFileResult[]
+  /** 暂存目录名（固定 `_raw`）。 */
+  stagedDir: string
+  /** 一句给用户/调用方的提示：这是暂存、未提炼、需蒸馏成正式页。 */
+  hint: string
 }
 
 export interface ImportLimits {
@@ -32,7 +46,7 @@ export interface ImportLimits {
 const DEFAULT_LIMITS: ImportLimits = { maxFiles: 500, maxBytes: 1024 * 1024, maxDepth: 12 }
 const EXCLUDE_DIRS = new Set(['node_modules', '.git', 'target', 'dist', '__pycache__', '.wiki'])
 
-/** 文件名 → 合法 id：小写、非法字符折叠为 -、去首尾 -；空则回退 untitled。导出供测试。 */
+/** 文件名 → 合法落点名：小写、非法字符折叠为 -、去首尾 -；空则回退 untitled。导出供测试。 */
 export function sanitizeId(name: string): string {
   const base = name.toLowerCase()
     .replace(/\.md$/i, '')
@@ -40,10 +54,6 @@ export function sanitizeId(name: string): string {
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
   return base || 'untitled'
-}
-
-function sha256(text: string): string {
-  return createHash('sha256').update(text).digest('hex')
 }
 
 interface Collected { path: string; relName: string }
@@ -75,28 +85,16 @@ function collect(root: string, limits: ImportLimits): Collected[] {
   return out
 }
 
-/** 标题：正文首个 # 行（去掉前缀 #）；无则用文件名净化前的原名。 */
-function titleFrom(body: string, fallback: string): string {
-  for (const line of body.split('\n')) {
-    const m = line.match(/^#\s+(.+)$/)
-    if (m) return m[1].trim()
-  }
-  return fallback
-}
-
-/** 剥离首个 # 标题行（title 已提取进 frontmatter，正文不再重复）。 */
-function stripFirstHeading(body: string): string {
-  const idx = body.split('\n').findIndex((l) => /^#\s+/.test(l))
-  if (idx === -1) return body
-  const lines = body.split('\n')
-  lines.splice(idx, 1)
-  return lines.join('\n').trim()
-}
-
+/**
+ * 把 `.md` 文件/目录**保真搬运**到 `<wiki>/_raw/` 暂存区。
+ *
+ * @param category 仅作为「蒸馏时的建议归类」写进提示，**不再决定落点**（保留下来的原因是
+ *   边栏的导入控件仍在传它；旧签名因此向后兼容）。
+ */
 export function importPath(
   store: VaultStore,
   root: string,
-  category: WikiCategory,
+  category: WikiCategory = 'references',
   limits: ImportLimits = DEFAULT_LIMITS,
 ): ImportReport {
   let rootStat
@@ -115,89 +113,25 @@ export function importPath(
     if (st.size > limits.maxBytes) {
       throw new Error(`文件超过 ${Math.floor(limits.maxBytes / 1024)}KB 上限：${c.path}（${Math.floor(st.size / 1024)}KB）`)
     }
-    sources.push({ path: c.path, name: c.relName, text: readFileSync(c.path, 'utf8').replace(/\r\n/g, '\n') })
+    sources.push({ path: c.path, name: c.relName, text: readFileSync(c.path, 'utf8') })
   }
 
-  const report: ImportReport = { imported: 0, updated: 0, skipped: 0, files: [] }
-  const now = new Date().toISOString()
+  const report: ImportReport = {
+    imported: 0,
+    updated: 0,
+    skipped: 0,
+    files: [],
+    stagedDir: RAW_DIR,
+    hint: `已保真暂存到 ${RAW_DIR}/（未提炼，暂不参与检索；蒸馏时可作为「${category}」参考）。`
+      + `让 agent 从 ${RAW_DIR}/ 提炼成正式知识页后，才会被 L1 / wiki_query / 语义检索命中。`,
+  }
 
   for (const src of sources) {
-    const parsed = parsePageText(src.text, sanitizeId(src.name), category)
-    // 显式 frontmatter 判定：围栏块存在且其中声明了 id 与 category
-    const fmBlock = src.text.match(/^---\n([\s\S]*?)\n---/)
-    const hasExplicitFm = fmBlock !== null
-      && /^id:\s*\S/m.test(fmBlock[1])
-      && /^category:\s*\S/m.test(fmBlock[1])
-
-    let id: string
-    let cat: WikiCategory
-    let page: WikiPage
-    if (parsed && hasExplicitFm) {
-      // 已有合法 frontmatter：按声明原样入库
-      id = parsed.id
-      cat = parsed.category
-      page = parsed
-      if (!SAFE_ID_RE.test(id)) {
-        report.files.push({ source: src.path, id: sanitizeId(src.name), category, status: 'skipped' })
-        report.skipped++
-        continue
-      }
-    } else {
-      id = sanitizeId(src.name)
-      cat = category
-      const rawBody = (src.text.match(/^---\n[\s\S]*?\n---\n?([\s\S]*)$/)?.[1] ?? src.text).trim()
-      const body = stripFirstHeading(rawBody)
-      page = {
-        id,
-        title: titleFrom(rawBody, src.name.replace(/\.md$/i, '')),
-        category: cat,
-        tags: [],
-        source: `import:${src.path}`,
-        confidence: 'inferred',
-        created: now,
-        updated: now,
-        body,
-      }
-    }
-
-    // id 冲突避让：库内已有且来源不同（重导判定见下）则加后缀。
-    // 先复用「本 source 已建立的 -N 页」更新，找不到才新建——否则每次重导都再避让一次，
-    // 生成 -3/-4/-5… 无限膨胀、旧页陈旧。
-    const existing = store.readPage(id, cat)
-    if (existing && existing.source !== page.source && existing.source !== `import:${src.path}`) {
-      let own: WikiPage | null = null
-      let free = ''
-      for (let suffix = 2; !own && !free; suffix++) {
-        const candidate = store.readPage(`${id}-${suffix}`, cat)
-        if (!candidate) free = `${id}-${suffix}`
-        else if (candidate.source === page.source) own = candidate
-      }
-      const renamed = true
-      id = own ? own.id : free
-      page = { ...page, id, ...(own ? { created: own.created } : {}) }
-      const res: ImportFileResult = { source: src.path, id, category: cat, status: 'imported', renamed }
-      store.writePage(page)
-      report.imported++
-      report.files.push(res)
-      continue
-    }
-
-    if (existing) {
-      const sameContent = sha256(existing.body) === sha256(page.body)
-      if (sameContent) {
-        report.files.push({ source: src.path, id, category: cat, status: 'skipped' })
-        report.skipped++
-        continue
-      }
-      store.writePage({ ...page, created: existing.created })
-      report.updated++
-      report.files.push({ source: src.path, id, category: cat, status: 'updated' })
-      continue
-    }
-
-    store.writePage(page)
-    report.imported++
-    report.files.push({ source: src.path, id, category: cat, status: 'imported' })
+    const staged = store.stageRawFile(sanitizeId(src.name), src.text)
+    if (staged.status === 'imported') report.imported += 1
+    else if (staged.status === 'updated') report.updated += 1
+    else report.skipped += 1
+    report.files.push({ source: src.path, staged: staged.relPath, status: staged.status })
   }
   return report
 }

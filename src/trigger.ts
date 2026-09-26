@@ -196,11 +196,13 @@ export interface SessionEventLike {
   type?: string
   seq?: number
   data?: {
-    source?: { kind?: string }
+    source?: { kind?: string; plugin?: string; form?: string; summary?: string }
     content?: Array<{ type?: string; text?: string }>
     name?: string
     arguments?: unknown
     text?: string
+    /** 回合号：宿主在 turn/step/tool 事件上都会带（见 dsh-session 的 SessionEventMap）。 */
+    turn?: number
   }
 }
 
@@ -302,6 +304,68 @@ export function shouldRemindCapture(facts: TurnFacts): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// 回合边界与「已提醒」判据
+//
+// 为什么不能靠「进程内的水位线」：进程重启/恢复会话后水位线回到 -1，第一次
+// turn-stopping 会把**整份历史**当成一个回合折叠（实测会把几天前的读库+改码史
+// 当成当前回合而误报），而且一旦置位就会永久压掉本该出现的那次提醒。
+// 现在的边界取宿主的回合号（tool/call 事件自带 data.turn），一次语义取**会话日志**——
+// 提醒本身就是一条落盘的 user/message（source.summary 带标记），重启后仍能查到。
+// ---------------------------------------------------------------------------
+
+/** 找当前回合：最后一条带 turn 的事件就是本回合（turn/end 若已落盘也同号）。 */
+export function currentTurnOf(events: readonly SessionEventLike[]): number | null {
+  for (let i = (events?.length ?? 0) - 1; i >= 0; i -= 1) {
+    const turn = events[i]?.data?.turn
+    if (typeof turn === 'number') return turn
+  }
+  return null
+}
+
+/** 只留本回合的工具调用（foldTurnFacts 的输入必须是「一个回合」，边界由宿主回合号决定）。 */
+export function turnToolCalls(events: readonly SessionEventLike[], turn: number): SessionEventLike[] {
+  return (events ?? []).filter((e) => e?.type === 'tool/call' && e.data?.turn === turn)
+}
+
+/** 本插件已经注入过的提醒摘要（跨进程重启仍有效：它们作为 user/message 落在会话日志里）。 */
+export function injectedNotices(events: readonly SessionEventLike[]): Set<string> {
+  const out = new Set<string>()
+  for (const event of events ?? []) {
+    if (event?.type !== 'user/message') continue
+    const source = event.data?.source
+    if (source?.kind !== 'plugin' || source.plugin !== PLUGIN_ID) continue
+    if (typeof source.summary === 'string' && source.summary.length > 0) out.add(source.summary)
+  }
+  return out
+}
+
+const PLUGIN_ID = 'dsh-knj-obsidian'
+/** L5 的摘要（去重键）。 */
+export const CAPTURE_SUMMARY = '沉淀提醒'
+/** L1 的摘要前缀；真实摘要形如 `知识库提示#123`，尾号是任务 seq（同一任务重启后不再重复注入）。 */
+export const TASK_SUMMARY_PREFIX = '知识库提示'
+
+/** L1 的摘要：把任务 seq 编进去，重启后仍能判定「这个任务已经提过」。 */
+export function taskSummaryOf(taskSeq: number): string {
+  return `${TASK_SUMMARY_PREFIX}#${taskSeq}`
+}
+
+/**
+ * 子代理会话是否也触发：`KNJ_OBSIDIAN_TRIGGER_SUBAGENT=off` 收敛为仅顶层会话。
+ * 默认开——子代理同样需要知识（且提醒本身不阻断）；噪声明显时用这个开关收敛。
+ */
+export function subagentTriggerEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return (env.KNJ_OBSIDIAN_TRIGGER_SUBAGENT ?? '').trim().toLowerCase() !== 'off'
+}
+
+/** 会话的委派深度（宿主 SessionHeader.delegationDepth；顶层会话为 0）。 */
+export function delegationDepthOf(session: unknown): number {
+  const header = (session as { header?: { delegationDepth?: number } } | null | undefined)?.header
+  const depth = header?.delegationDepth
+  return typeof depth === 'number' && Number.isFinite(depth) ? depth : 0
+}
+
+// ---------------------------------------------------------------------------
 // cordis 接线：薄到只剩「取值 → 纯函数 → 注入」。
 // 交付机制照 dsh-doublecheck：agent.inject(createUserMessage({...})) 把一条 user 消息
 // 放进**下一步**的 inbox（inject → send(input, 'next-step', false)）。
@@ -313,10 +377,12 @@ export interface TriggerDeps {
   createNotice?: (text: string, summary: string) => unknown
 }
 
-/** 触发层只需要 provider 的「当前库」读取能力。 */
+/**
+ * 触发层只需要 provider 的「当前库**只读**」能力。
+ * 刻意不声明 current()：那条路径会 ensure()（建 .wiki），与「绝不写库」冲突。
+ */
 export interface VaultProviderLike {
   currentReadonly?: () => VaultStore
-  current?: () => VaultStore
 }
 
 interface SessionLike {
@@ -340,10 +406,8 @@ export interface TriggerHost {
 interface TriggerState {
   /** 已处理过的直接用户任务 seq（同一个任务只匹配一次，任务内后续步骤不再重复匹配）。 */
   lastTaskSeq: number
-  /** L5 每会话只提醒一次。 */
+  /** L5 每会话只提醒一次（进程内快路径；判据本身见 injectedNotices）。 */
   captureReminded: boolean
-  /** 回合事实折叠的水位线（只折叠新事件）。 */
-  lastEventSeq: number
 }
 
 /** 会话事件快照：0.1.2-alpha.5+ 用 snapshotEvents()，更早用 .events（与 doublecheck 同探测）。 */
@@ -376,54 +440,80 @@ export function installTrigger(
     const key = (session ?? {}) as object
     const existing = states.get(key)
     if (existing) return existing
-    const created: TriggerState = { lastTaskSeq: -1, captureReminded: false, lastEventSeq: -1 }
+    const created: TriggerState = { lastTaskSeq: -1, captureReminded: false }
     states.set(key, created)
     return created
   }
 
-  /** 只读取当前库；不可用时返回 null（触发层是增益，不是依赖）。 */
+  /**
+   * 只读取当前库；不可用时返回 null（触发层是增益，不是依赖）。
+   * **不回退** provider.current()：那条路径会 store.ensure() —— 在一个还没有知识库的
+   * 工作区里凭空建出 .wiki 与 7 个分类目录。触发层的契约是「绝不写库」，
+   * 所以缺 currentReadonly 时宁可静默不触发。
+   */
   function currentVault(): VaultStore | null {
     try {
-      const store = typeof provider.currentReadonly === 'function'
-        ? provider.currentReadonly()
-        : provider.current?.()
-      return store ?? null
+      if (typeof provider.currentReadonly !== 'function') return null
+      return provider.currentReadonly() ?? null
     } catch {
       return null
     }
   }
 
-  ctx.on('agent/pre-step', async ({ agent }, next) => {
-    const decision = await next()
-    if (!triggerEnabled() || agent?.inject === undefined) return decision
+  /** 子代理策略 + 开关：两条都在最外层判定，关了就连事件都不读。 */
+  function shutdownCheck(agent: AgentLike | undefined): boolean {
+    if (!triggerEnabled()) return true
+    if (agent?.inject === undefined) return true
+    if (!subagentTriggerEnabled() && delegationDepthOf(agent.session) > 0) return true
+    return false
+  }
+
+  /** 注册监听；单条注册失败不得冒泡（否则会打断插件 apply 之后的链路）。 */
+  function register(event: string, handler: unknown): void {
     try {
-      const task = latestDirectUserTask(sessionEventsOf(agent.session))
+      ctx.on(event as 'agent/pre-step', handler as never)
+    } catch {
+      // 宿主拒绝注册：触发层缺席，插件其余能力照常
+    }
+  }
+
+  register('agent/pre-step', async ({ agent }: { agent?: AgentLike }, next: () => Promise<unknown>) => {
+    const decision = await next()
+    if (shutdownCheck(agent)) return decision
+    try {
+      const events = sessionEventsOf(agent!.session)
+      const task = latestDirectUserTask(events)
       if (!task) return decision
-      const state = stateOf(agent.session)
+      const state = stateOf(agent!.session)
       if (state.lastTaskSeq === task.seq) return decision
       state.lastTaskSeq = task.seq // 同一任务只匹配一次（无论是否有命中）
+      // 跨重启去重：提醒本身作为 user/message 落在会话日志里，摘要带任务 seq
+      if (injectedNotices(events).has(taskSummaryOf(task.seq))) return decision
       const store = currentVault()
       if (!store) return decision
       const hits = matchTaskPages(store, task.text)
       if (hits.length === 0) return decision
-      agent.inject(await createNotice(renderTaskReminder(hits), '知识库提示'))
+      agent!.inject?.(await createNotice(renderTaskReminder(hits), taskSummaryOf(task.seq)))
     } catch {
       // 触发层任何异常都不得影响主流程
     }
     return decision
   })
 
-  ctx.on('agent/turn-stopping', async ({ agent }) => {
-    if (!triggerEnabled() || agent?.inject === undefined) return
+  register('agent/turn-stopping', async ({ agent }: { agent?: AgentLike }) => {
+    if (shutdownCheck(agent)) return
     try {
-      const state = stateOf(agent.session)
+      const state = stateOf(agent!.session)
       if (state.captureReminded) return
-      const events = sessionEventsOf(agent.session)
-      const fresh = events.filter((e) => (e.seq ?? 0) > state.lastEventSeq)
-      state.lastEventSeq = events.reduce((max, e) => Math.max(max, e.seq ?? 0), state.lastEventSeq)
-      if (!shouldRemindCapture(foldTurnFacts(fresh))) return
+      const events = sessionEventsOf(agent!.session)
+      if (injectedNotices(events).has(CAPTURE_SUMMARY)) { state.captureReminded = true; return }
+      const turn = currentTurnOf(events)
+      if (turn === null) return
+      // 回合边界由宿主的回合号给出：只折叠本回合的工具调用，
+      // 不碰历史（历史里「读过库 + 改过码」会让每个新回合都误报）
+      if (!shouldRemindCapture(foldTurnFacts(turnToolCalls(events, turn)))) return
       state.captureReminded = true
-      agent.inject(await createNotice(renderCaptureReminder(), '沉淀提醒'))
+      agent!.inject?.(await createNotice(renderCaptureReminder(), CAPTURE_SUMMARY))
     } catch {
       // 同上
     }

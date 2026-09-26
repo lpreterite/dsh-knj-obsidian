@@ -1,7 +1,7 @@
 // incremental-routes.test.mjs — v6 端点（rebuild-index / import）先红后绿
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
@@ -100,7 +100,11 @@ test('POST /import：目录导入返回清单（源在库根内）', async (t) =
   })
   assert.equal(r.status, 200, JSON.stringify(r.json))
   assert.equal(r.json.imported, 1)
-  assert.ok(store.readPage('note-a', 'references'))
+  // 2026-09-20 契约变更：导入 = 保真搬运到 _raw/ 暂存区，不再直接写正式分类
+  assert.equal(r.json.files[0].staged, '_raw/note-a.md')
+  assert.match(r.json.hint, /_raw|暂存/)
+  assert.equal(store.readPage('note-a', 'references'), null, '不得写进正式分类')
+  assert.ok(existsSync(join(dir, '.wiki', '_raw', 'note-a.md')), '应落在 _raw/')
 })
 
 test('POST /import：库外路径拒绝（400，不读不写）', async (t) => {

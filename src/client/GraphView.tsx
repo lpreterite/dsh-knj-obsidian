@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom'
 import { fetchPages, fetchPage } from './api.ts'
 import { renderMarkdown } from './markdown.ts'
 import { IconClose, IconCompress, IconExpand, IconGraph, IconRefresh } from './icons.tsx'
+import { LABEL_GAP, NODE_R, labelWidth, placeLabels, spreadToFill } from '../graph-layout.ts'
 
 interface GraphNode { id: string; title: string; category: string; confidence: string }
 interface GraphEdge { source: string; target: string; broken: boolean }
@@ -26,6 +27,18 @@ const CATEGORY_CLASS: Record<string, string> = {
 const CATEGORY_LABELS: Record<string, string> = {
   concepts: '概念', entities: '实体', references: '参考', synthesis: '综合', projects: '项目',
   dictionaries: '字典', tables: '数据结构',
+}
+
+/** 浏览器里用 canvas 实测标签宽度；无 canvas 时退回 graph-layout 的估算口径（Node 测试用同一口径）。 */
+function makeLabelMeasurer(): (t: string) => number {
+  try {
+    const ctx = document.createElement('canvas').getContext('2d')
+    if (!ctx) return labelWidth
+    ctx.font = '11px system-ui, -apple-system, "Segoe UI", sans-serif'
+    return (t: string) => ctx.measureText(t).width
+  } catch {
+    return labelWidth
+  }
 }
 
 function layoutParams(n: number): { frameLimit: number; spring: number } {
@@ -89,7 +102,11 @@ export function GraphView({ onOpenNote }: { onOpenNote: (id: string, category: s
     if (!graph || !svgRef.current || !active) return
     const svg = svgRef.current
     const W = size.w, H = size.h
-    const nodes = graph.nodes.map((n, i) => ({
+    // label/side 由 placeLabels 在布局收敛后写入（见 graph-layout.ts）
+    const nodes: (GraphNode & {
+      x: number; y: number; vx: number; vy: number
+      label?: string; side?: 'left' | 'right'
+    })[] = graph.nodes.map((n, i) => ({
       ...n,
       x: W / 2 + Math.cos(i * 2.4) * Math.min(120, Math.max(60, W / 5)),
       y: H / 2 + Math.sin(i * 2.4) * Math.min(100, Math.max(50, H / 5)),
@@ -129,7 +146,15 @@ export function GraphView({ onOpenNote }: { onOpenNote: (id: string, category: s
       paint()
       frame++
       if (frame < frameLimit) raf = requestAnimationFrame(tick)
+      else {
+        // 布局收敛后再「铺开 + 标签选边/截断」：中途做会与力场互相打架。
+        // 铺开只动节点坐标，圆半径与字号不变——既填满面板又不产生变形。
+        spreadToFill(nodes, W, H)
+        placeLabels(nodes, W, H, measureLabel)
+        paint()
+      }
     }
+    const measureLabel = makeLabelMeasurer()
     const paint = () => {
       let out = ''
       for (const e of edges) {
@@ -137,9 +162,14 @@ export function GraphView({ onOpenNote }: { onOpenNote: (id: string, category: s
       }
       for (const n of nodes) {
         const cls = orphans.has(n.id) ? 'knj-graph-node--orphan' : (CATEGORY_CLASS[n.category] ?? 'knj-graph-node--muted')
+        const side = n.side ?? 'right'
+        const label = n.label ?? n.title
+        const lx = side === 'left' ? n.x - LABEL_GAP : n.x + LABEL_GAP
         out += `<g data-id="${esc(n.id)}" data-category="${esc(n.category)}" data-title="${esc(n.title)}" style="cursor:pointer">`
-        out += `<circle cx="${n.x}" cy="${n.y}" r="8" class="knj-graph-node ${cls}"/>`
-        out += `<text x="${n.x + 12}" y="${n.y + 4}" class="knj-graph-label">${esc(n.title)}</text>`
+        // 悬停显示完整标题：标签可能因面板过窄被截断（见 graph-layout.placeLabels）
+        out += `<title>${esc(n.title)}</title>`
+        out += `<circle cx="${n.x}" cy="${n.y}" r="${NODE_R}" class="knj-graph-node ${cls}"/>`
+        out += `<text x="${lx}" y="${n.y + 4}" class="knj-graph-label" text-anchor="${side === 'left' ? 'end' : 'start'}">${esc(label)}</text>`
         out += `</g>`
       }
       svg.innerHTML = out

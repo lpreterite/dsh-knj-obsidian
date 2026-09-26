@@ -89,7 +89,10 @@ export interface ImportResult {
   imported: number
   updated: number
   skipped: number
-  files: Array<{ source: string; id: string; category: string; status: string; renamed?: boolean }>
+  /** 2026-09-20 契约变更：导入 = 保真搬运到 `_raw/` 暂存区，不再直接写正式分类。 */
+  files: Array<{ source: string; staged: string; status: string }>
+  stagedDir?: string
+  hint?: string
 }
 
 /** v6：路径导入 md（同源 POST）。 */
