@@ -56,7 +56,7 @@ test('mountTools 注册 wiki_ingest + wiki_capture + wiki_lint + wiki_query 并�
   const fakeCtx = { tools: { register: (def) => registered.push(def) } }
   const dispose = mountTools(fakeCtx, store)
   const names = registered.map((d) => d.name)
-  assert.deepEqual(names.sort(), ['wiki_capture', 'wiki_checkpoint', 'wiki_checkpoints', 'wiki_export', 'wiki_ingest', 'wiki_init', 'wiki_lint', 'wiki_mine', 'wiki_normalize_tags', 'wiki_query', 'wiki_search_semantic'])
+  assert.deepEqual(names.sort(), ['wiki_capture', 'wiki_checkpoint', 'wiki_checkpoints', 'wiki_drill', 'wiki_export', 'wiki_ingest', 'wiki_init', 'wiki_lint', 'wiki_mine', 'wiki_normalize_tags', 'wiki_query', 'wiki_read', 'wiki_search_semantic'])
   assert.equal(typeof dispose, 'function')
 })
 

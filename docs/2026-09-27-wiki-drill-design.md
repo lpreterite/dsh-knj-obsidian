@@ -243,7 +243,7 @@
 |---|---|
 | `src/drill.ts` | 新增：邻接推导（复用 `buildGraph`）、种子 RRF 融合、`graph-neighbor` 候选构造、截断与标注 |
 | `src/tools.ts` | 注册 `wiki_drill`、`wiki_read`；新开关读取；miss 日志接入下钻空结果 |
-| `src/retriever.ts` | **仅导出**既有 `scoreOf`/`degreeMap`（或等价的 `rankSeeds` 助手）供 `drill.ts` 复用，不改行为 |
+| `src/retriever.ts` | **实现后订正：无需改动**。原计划「仅导出 `scoreOf`/`degreeMap`」，实际 `drill.ts` 直接复用已导出的 `TIER_WEIGHT` 并用 `buildGraph` 自建邻接与度数——比改 `retriever.ts` 更小的侵入面，且同样避免第二套打分口径 |
 | `wiki-query/SKILL.md` | 增补 `wiki_drill` / `wiki_read` 的使用引导（含「一跳 + 迭代」口径） |
 | `wiki-query/references/retrieval-guide.md` | fallback 流程补一条「命中后沿双链下钻」的等价手工做法 |
 | `README.md` | 工具表与检索章节补两个工具 |
@@ -260,4 +260,4 @@
 7. `wiki_read`：整页 + 摘要 + 出入链清单；未知 id 的空结果；
 8. 回归：`wiki_query` / `wiki_search_semantic` 既有用例逐字节不变；
 9. 文档断言：SKILL.md 含 `wiki_drill` 与 `wiki_read`；
-10. 全量回归：`node --test "*.test.mjs"` 全绿（当前基线 383 例）。
+10. 全量回归：`node --test "*.test.mjs"` 全绿。**实测基线：加本文件前 398 例（设计初稿写的 383 是加 `wiki-drill.test.mjs` 之前的旧数）；落地后 404 例全绿**（15 例 lib 层 + 6 例工具层）。

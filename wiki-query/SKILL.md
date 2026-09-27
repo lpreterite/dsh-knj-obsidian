@@ -5,7 +5,9 @@ description: >
   when the user asks about their knowledge base, "what do I know about X",
   "find everything related to Y", or wants synthesized answers with citations
   from their wiki pages. Also use for multi-hop questions ("how is X connected
-  to Y"). Works from any project. READ-ONLY — never create or modify pages.
+  to Y"). For paraphrase-style or natural-language questions prefer wiki_drill
+  (semantic seeds + one-hop wikilink neighbors) and read hits with wiki_read.
+  Works from any project. READ-ONLY — never create or modify pages.
 ---
 
 # Wiki Query — 分层检索知识库
@@ -50,6 +52,33 @@ L2 无果时，读候选文件正文找查询词；截取命中上下文 ≤200 
 
 ### L4 — 图谱邻居（增强）
 解析命中的页面的 `[[链接]]`，取其一跳邻居页面作为关联候选，注明「关联」。
+
+## 语义种子 + 双链下钻（`wiki_drill` / `wiki_read`）
+
+L1–L4 是**词面**检索：多词、改写式、自然语言提问常常 0 命中（「知识库怎么触发检索」这类句子
+与库内页没有共享字面词）。遇到这类提问，**优先用 `wiki_drill`**：
+
+| 工具 | 用途 |
+|---|---|
+| `wiki_drill({ query })` | 模式 A：语义（QMD 双通道）+ 词面两路按名次 RRF 融合出**种子页**，每个种子附带**一跳** wikilink 邻居（含方向 `out`/`in`、断链 `broken`、来源 `via`） |
+| `wiki_drill({ page })` | 模式 B：已知页 id 时做**纯图**下钻（毫秒级、不跑嵌入），取该页的出链与入链 |
+| `wiki_read({ id })` | 读**整页**正文 + frontmatter 摘要 + 出/入链清单 |
+
+推荐流程：`wiki_drill({query})` 拿种子 → `wiki_read` 读最像的那页 → 不满意就
+`wiki_drill({page: '<该页链到的 id>'})` 继续一跳，逐跳推进。
+
+三条纪律：
+
+1. **只做一跳**。工具刻意不返回两跳（实测本库两跳即覆盖全库 40%–60%，等于把半个库倒进上下文）；
+   更深由你决定走哪条链，自己再调一次 `page` 模式。
+2. **邻居 ≠ 命中**。种子里 `matchedBy` 为 `title`/`tag`/`body`/`semantic` 的是检索命中；
+   邻居的 `matchedBy` 恒为 `graph-neighbor`，它是「从命中页走链到达」，证据强度更低，
+   引用时要说清是顺链找到的。
+3. **引用前必须读整页**。只用 snippet 合成答案会出现「有引用格式、没读原文」的伪知识；
+   `wiki_read` 就是为这一步准备的。
+
+降级是**如实回报**的：语义索引陈旧/模型缺失时结果照给，但 `message` 会说明「基于旧索引」
+或「本次仅词面通道」——不要忽略该说明，也不要因此断定库里没有该知识。
 
 ## 打分与排序（候选恒按分降序）
 

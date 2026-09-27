@@ -18,7 +18,7 @@ dsh plugin --profile web add ./dsh-knj-obsidian-2026.8.257.tgz
 # 3. 重启 DSH，确认宿主日志无 dsh-knj-obsidian 相关报错
 ```
 
-安装后插件在 DSH 启动时自动向 agent 暴露工具（`wiki_ingest` / `wiki_capture` / `wiki_lint` / `wiki_query` / `wiki_export`），并随包分发 `wiki-query` skill，无需额外配置。
+安装后插件在 DSH 启动时自动向 agent 暴露工具（`wiki_ingest` / `wiki_capture` / `wiki_normalize_tags` / `wiki_lint` / `wiki_query` / `wiki_drill` / `wiki_read` / `wiki_export` / `wiki_mine` / `wiki_init` / `wiki_checkpoint` / `wiki_checkpoints` / `wiki_search_semantic`），并随包分发 5 个 `wiki-*` skill，无需额外配置。
 
 ## v1 能力
 
@@ -87,6 +87,22 @@ v2 检索基于同一 `.wiki/` 知识库，提供**双通道**能力，均**只�
 
 - 入参：`query`（检索词，必填）、`mode`（`auto` 分层 / `index-only` 只查 index）、`maxCandidates`（默认 10）。
 - 返回：`candidates[]`（page / id / category / title / confidence / snippet / matchedBy）+ `strategy` + `totalPages`。
+
+### wiki_drill（语义种子 + 一跳双链下钻）与 wiki_read（读整页）
+
+词面分层（L1–L4）对**改写式提问**天然无力：句子与库内页没有共享字面词，整串/分词匹配都会 0 命中。
+`wiki_drill` 专治这一类，并为「检索到了却没人读原文」补上最后一环：
+
+| 工具 | 入参 | 返回 |
+| --- | --- | --- |
+| `wiki_drill` | `query`（模式 A）或 `page`（模式 B）、`limit`（种子数，默认 5 / 上限 10）、`neighbors`（每种子邻居数，默认 8 / 上限 20）、`direction`（模式 B：`out`/`in`/`both`） | `seeds[]`：模式 A 把**语义（QMD 本地双通道）与词面两路按名次 RRF 融合**，每条带 `matchedBy` 与 `sources`（哪些通道贡献）；每个种子附**一跳**邻居 `neighbors[]`（`direction` / `broken` / `degree` / `via` / `matchedBy: 'graph-neighbor'`）。另有 `strategy`、`truncated`、`message`、`semantic.status` |
+| `wiki_read` | `id`（必填）、`category`（同 id 跨分类歧义时用） | `body` 整页正文 + frontmatter 摘要/`tier`/`confidence` + `outLinks` / `inLinks` / `brokenLinks` 清单 |
+
+推荐流程：`wiki_drill({query})` 拿种子 → `wiki_read` 读最像的那页 → 不满意就 `wiki_drill({page: '<该页链到的 id>'})` 继续一跳。
+
+- **只给一跳**：实测本库两跳即覆盖全库 40%–60%，一次性多跳等于把半个库倒进上下文；更深由调用方逐跳迭代（模式 B 毫秒级、不跑嵌入）。
+- **邻居不是命中**：邻居的 `matchedBy` 恒为 `graph-neighbor`（与 L4 的 `graph` 区分），属「顺链到达」，证据强度低于直接命中。
+- **降级如实回报**：索引陈旧/模型缺失时结果照给，但 `message` 与 `semantic.status` 会说明「基于旧索引」「本次仅词面通道」；`KNJ_OBSIDIAN_DRILL=off` 可整体关闭这两个工具（`wiki_query` 不受影响），`KNJ_OBSIDIAN_SEMANTIC_FALLBACK=off` 会一并关掉下钻的语义通道（用户关它的意图就是别加载 300M 模型）。
 
 ### wiki-query skill（无工具 fallback）
 

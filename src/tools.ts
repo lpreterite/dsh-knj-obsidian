@@ -22,6 +22,10 @@ import {
   type SemanticHit, type SemanticRuntime,
 } from './semantic-index.ts'
 import { refresherFor, vaultRootOf } from './semantic-refresh.ts'
+import {
+  drillQuery, drillPage, readPageDetail, drillEnabled,
+  type DrillSemanticBackend, type DrillSemanticStatus,
+} from './drill.ts'
 
 /** wiki_mine 输出的表候选 items（dbNew/dbChanged/dbUnchanged/tables 共用）。 */
 const TABLE_ITEM_SCHEMA = {
@@ -1220,6 +1224,194 @@ export function mountTools(ctx: Context, provider: VaultProvider, opts: MountToo
         // 每次调用自建的 store 用完即关：不留 sqlite 句柄（索引文件在 ~/.dsh/qmd 下）
         try { await semantic.close?.() } catch { /* 关闭失败不影响检索结果 */ }
       }
+    },
+  }))
+
+  // ---------- wiki_drill / wiki_read：语义种子 + 一跳双链下钻（设计 docs/2026-09-27-wiki-drill-design.md） ----------
+  //
+  // 与 wiki_query 的关系：wiki_query 一字不改（它的词面优先语义与打分公式被 60+ 例测试锁着，
+  // 且语义层 spec 首条优先级是「零行为变更」）。新语义只在新工具里长。
+
+  /**
+   * 为 wiki_drill 组装语义后端。任何不可用都返回 null + 如实状态，绝不抛错：
+   * 复用按库缓存的语义运行时（模型只加载一次），通道失败由 runOfflineSearch 如实回报。
+   * 注意：KNJ_OBSIDIAN_SEMANTIC_FALLBACK=off 一并关掉下钻的语义通道——用户设这个开关的意图
+   * 就是「别加载 300M 模型」，新消费者不该偷偷绕开它。
+   */
+  async function drillSemanticProbe(): Promise<{
+    backend: DrillSemanticBackend | null
+    status: DrillSemanticStatus
+    holder: { degraded?: string }
+  }> {
+    const holder: { degraded?: string } = {}
+    if (!semanticFallbackEnabled()) {
+      return { backend: null, status: 'disabled', holder: { degraded: '语义层已被 KNJ_OBSIDIAN_SEMANTIC_FALLBACK=off 关闭。' } }
+    }
+    const base = currentReadonlyStore(provider)
+    const vaultRoot = provider.currentRecord()?.root ?? vaultRootOf(base)
+    const runtime = await semanticRuntimeFor(vaultRoot, runtimeFactory)
+    if (!runtime) return { backend: null, status: 'library-missing', holder }
+    if (!runtime.modelPresent) return { backend: null, status: 'model-missing', holder }
+    if (!runtime.store) return { backend: null, status: 'library-missing', holder }
+    const qmd = runtime.store
+    const backend: DrillSemanticBackend = {
+      name: 'qmd-offline',
+      async search(query, searchOpts) {
+        // 严格离线：只用本地向量 + BM25 两通道并在本地融合，绝不调 store.search()（会拉起云端模型）
+        const outcome = await runOfflineSearch(qmd, query, searchOpts?.limit ?? 5)
+        if (outcome.degraded) holder.degraded = outcome.degraded
+        return outcome.results.map((r) => ({ id: r.id, category: r.category as WikiCategory, snippet: r.snippet }))
+      },
+    }
+    return { backend, status: runtime.status, holder }
+  }
+
+  function recordDrillMiss(res: { seeds: readonly unknown[]; totalPages: number }, query: string, semanticTried: boolean): void {
+    if (res.seeds.length > 0 || !missLogEnabled()) return
+    try {
+      const vaultRoot = provider.currentRecord()?.root ?? vaultRootOf(currentReadonlyStore(provider))
+      recordQueryMiss({ at: new Date().toISOString(), vaultRoot, workspace: basename(vaultRoot), query, mode: 'drill', totalPages: res.totalPages, semanticTried })
+    } catch {
+      // 诊断日志绝不打断检索
+    }
+  }
+
+  const DRILL_NEIGHBOR_SCHEMA = {
+    type: 'object', additionalProperties: false,
+    properties: {
+      id: { type: 'string', required: true }, category: { type: 'string', required: true },
+      title: { type: 'string', required: true }, tier: { type: 'string', required: true },
+      direction: { type: 'string', required: true }, broken: { type: 'boolean', required: true },
+      degree: { type: 'number', required: true }, via: { type: 'string', required: true },
+      matchedBy: { type: 'string', required: true }, score: { type: 'number', required: true },
+    },
+  } as const
+
+  const DRILL_SEED_SCHEMA = {
+    type: 'object', additionalProperties: false,
+    properties: {
+      page: { type: 'string', required: true }, id: { type: 'string', required: true },
+      category: { type: 'string', required: true }, title: { type: 'string', required: true },
+      confidence: { type: 'string', required: true }, tier: { type: 'string', required: true },
+      source: { type: 'string', required: true }, snippet: { type: 'string', required: true },
+      score: { type: 'number', required: true }, matchedBy: { type: 'string', required: true },
+      sources: { type: 'array', required: true, items: { type: 'string' } },
+      neighbors: { type: 'array', required: true, items: DRILL_NEIGHBOR_SCHEMA },
+    },
+  } as const
+
+  ctx.tools.register(defineTool({
+    name: 'wiki_drill',
+    description: '语义种子 + 一跳双链下钻。模式 A（给 query）：QMD 语义（本地向量+BM25，离线）与词面两路按名次 RRF 融合出种子页，每个种子附带【一跳】wikilink 邻居（带方向 out/in、断链标记 broken、来源 via）。模式 B（给 page）：已知页 id 时做纯图下钻（毫秒级、不跑嵌入）。刻意只给一跳——实测库内两跳即覆盖全库 40%–60%，更深请用 page 模式逐跳迭代。邻居的 matchedBy 恒为 graph-neighbor，属「顺链到达」，证据强度低于直接命中。只读，零写入。',
+    parameters: {
+      query: { type: 'string', description: '模式 A：自然语言问题或关键词（走语义 + 词面融合）' },
+      page: { type: 'string', description: '模式 B：页面 id（纯图下钻，不跑嵌入）' },
+      limit: { type: 'number', description: '模式 A 种子数，默认 5、上限 10' },
+      neighbors: { type: 'number', description: '每个种子/页面附带的邻居数，默认 8、上限 20' },
+      direction: { type: 'string', enum: ['out', 'in', 'both'], description: '模式 B 的邻接方向，默认 both' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          mode: { type: 'string', required: true },
+          strategy: { type: 'string', required: true },
+          totalPages: { type: 'number', required: true },
+          seeds: { type: 'array', required: true, items: DRILL_SEED_SCHEMA },
+          truncated: {
+            type: 'object', additionalProperties: false,
+            properties: { seeds: { type: 'boolean', required: true }, neighbors: { type: 'boolean', required: true } },
+          },
+          message: { type: 'string' },
+          semantic: {
+            type: 'object', additionalProperties: false,
+            properties: { status: { type: 'string', required: true }, degraded: { type: 'string' } },
+          },
+        },
+      },
+      render: (_args, value) => {
+        if (value.seeds.length === 0) {
+          return [{ type: 'text', text: value.message ?? `下钻无结果（${value.totalPages} 页）。` }]
+        }
+        const parts = value.seeds.map((s) => {
+          const nb = s.neighbors.length > 0
+            ? ` → 邻居：${s.neighbors.map((n) => `${n.id}${n.broken ? '(断链)' : n.direction === 'in' ? '(入)' : '(出)'}`).join('、')}`
+            : ' → 无库内双链'
+          return `${s.id}[${s.matchedBy}]${nb}`
+        })
+        const note = value.message ? `；${value.message}` : ''
+        const cut = value.truncated ? '（已截断）' : ''
+        return [{ type: 'text', text: `下钻 ${value.seeds.length} 个种子（${value.strategy}）${cut}：${parts.join('｜')}${note}` }]
+      },
+    },
+    async execute(args) {
+      const store = currentReadonlyStore(provider)
+      if (!drillEnabled()) {
+        return {
+          mode: 'query' as const, strategy: 'disabled', seeds: [], totalPages: store.listPagesReadonly().length,
+          message: 'wiki_drill 已由 KNJ_OBSIDIAN_DRILL=off 关闭（wiki_query 与 wiki_search_semantic 不受影响）。',
+        }
+      }
+      if (args.page) {
+        return drillPage(store, args.page, { neighbors: args.neighbors, direction: args.direction })
+      }
+      if (!args.query) {
+        return {
+          mode: 'query' as const, strategy: 'empty-query', seeds: [], totalPages: store.listPagesReadonly().length,
+          message: '请给出 query（语义种子 + 一跳邻居）或 page（已知 id 的纯图下钻）之一。',
+        }
+      }
+      const probe = await drillSemanticProbe()
+      const res = await drillQuery(store, args.query, {
+        semantic: probe.backend,
+        semanticStatus: probe.status,
+        ...(probe.holder.degraded ? { semanticDegraded: probe.holder.degraded } : {}),
+        limit: args.limit,
+        neighbors: args.neighbors,
+      })
+      recordDrillMiss(res, args.query, probe.status !== 'disabled')
+      return res
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'wiki_read',
+    description: '读取 wiki 页面的整页正文（含 frontmatter 摘要、tier、confidence）以及出链/入链清单（含断链）。用于「引用前读原文」——只用检索返回的 snippet 合成答案会产生「有引用格式、没读原文」的伪知识。只读，零写入。',
+    parameters: {
+      id: { type: 'string', required: true, description: '页面 id（kebab-case，与 frontmatter/filename 一致）' },
+      category: { type: 'string', description: '可选：同 id 跨分类歧义时显式指定分类' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          found: { type: 'boolean', required: true },
+          message: { type: 'string' },
+          page: { type: 'string' }, id: { type: 'string' }, category: { type: 'string' },
+          title: { type: 'string' }, tier: { type: 'string' }, confidence: { type: 'string' },
+          summary: { type: 'string' }, body: { type: 'string' },
+          outLinks: { type: 'array', items: { type: 'string' } },
+          brokenLinks: { type: 'array', items: { type: 'string' } },
+          inLinks: { type: 'array', items: { type: 'string' } },
+        },
+      },
+      render: (_args, value) => {
+        if (!value.found) return [{ type: 'text', text: value.message ?? '页面不存在。' }]
+        const out = value.outLinks?.length ? `出链 ${value.outLinks.length}（断链 ${value.brokenLinks?.length ?? 0}）` : '无出链'
+        const inc = value.inLinks?.length ? `入链 ${value.inLinks.length}` : '无入链'
+        return [{
+          type: 'text',
+          text: `${value.page}（${value.title}，tier=${value.tier}，confidence=${value.confidence}）｜${out}｜${inc}\n\n${value.body ?? ''}`,
+        }]
+      },
+    },
+    async execute(args) {
+      const store = currentReadonlyStore(provider)
+      const detail = readPageDetail(store, args.id, args.category as WikiCategory | undefined)
+      if (!detail) {
+        return { found: false as const, message: `页面 id 不存在：${args.id}。可先用 wiki_query 或 wiki_drill 找到真实 id。` }
+      }
+      return { found: true as const, ...detail }
     },
   }))
 
