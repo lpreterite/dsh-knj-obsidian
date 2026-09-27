@@ -1,6 +1,6 @@
 {
   "name": "dsh-knj-obsidian",
-  "version": "2026.9.270",
+  "version": "2026.9.271",
   "description": "DSH 内置版 Obsidian：AI agent 知识库的构建、检索、图谱、UI 与增量构建（v1 构建 + v2 检索 + v3 图谱 + v4 UI + v5 笔记编辑 + v6 增量构建 + v7 多库管理）",
   "type": "module",
   "main": "lib/index.js",
@@ -77,6 +77,7 @@
     "@deepseek-ai/dsh-tools": "0.1.2-rc.1",
     "@deepseek-ai/dsh-user-approval": "^0.1.2-rc.1",
     "@rolldown/binding-win32-x64-msvc": "^1.2.6",
+    "@tobilu/qmd": "^2.8.3",
     "@types/node": "^22.0.0",
     "@types/react": "~18.3.1",
     "@types/react-dom": "^18.3.1",
