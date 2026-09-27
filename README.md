@@ -369,10 +369,22 @@ v12 按对抗审查结论给「知识蒸馏」补上可回滚与可评估能力�
 ## 开发
 
 ```bash
+npm ci --legacy-peer-deps --ignore-scripts   # 装依赖：两个旗标缺一不可（见下）
 npm run check   # typecheck + build（服务端）
 npm run check:client && npm run build:client   # 客户端类型检查 + bundle
-node --test *.test.mjs   # 全部测试（191 例；含 collection-client 启动器契约与 vault-init 初始化契约）
+node --test *.test.mjs   # 全部测试（383 例）
 ```
+
+> **为什么装依赖必须带这两个旗标**（干净机器实测，缺一必失败）：
+> - `--legacy-peer-deps`：devDependencies 里 `@deepseek-ai/dsh-client-runtime@0.1.1-rc.2` 的 peer
+>   `dsh-agent@^0.1.1-rc.2` 在 semver 预发布规则下**永不被** `0.1.2-rc.*` 满足，裸跑 `npm ci`
+>   必报 ERESOLVE（与网络/缓存无关）。
+> - `--ignore-scripts`：`better-sqlite3@13` 没有 install 脚本，但包内带 `binding.gyp`，npm 见到就
+>   自动执行 `node-gyp rebuild`，无 Visual Studio 的机器直接失败；而其 `prebuilds/**`
+>   （含 `win32-x64.node`）本就随包分发，无需编译。
+>
+> 实测：`npm ci --legacy-peer-deps --ignore-scripts` → 393 包、exit 0，随后 `tsc` / 构建 / 383 例测试全绿。
+> 另注意：`npm install --no-save @tobilu/qmd` 对本仓是**空操作**（qmd 是 optional peer，npm 认为已满足）。
 
 > 已知基线：`wiki_ingest` 的 `relatedCheck` 输出是 master 工作树中尚未收尾的 WIP（`src/tools.ts` 已新增输出但 `ingest-delta.test.mjs` / `tools.test.mjs` 断言未同步），与 v9/v10 功能无关；相关 8 例在 master 原工作树同样失败。
 
