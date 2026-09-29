@@ -13,12 +13,45 @@ DSH（DeepSeek Harness）内简化版 Obsidian：为 AI agent 提供项目级知
 npm pack
 
 # 2. 在插件目录内执行：安装到 DSH 的 web profile
-dsh plugin --profile web add ./dsh-knj-obsidian-2026.8.257.tgz
+dsh plugin --profile web add ./dsh-knj-obsidian-2026.9.301.tgz
 
 # 3. 重启 DSH，确认宿主日志无 dsh-knj-obsidian 相关报错
 ```
 
 安装后插件在 DSH 启动时自动向 agent 暴露工具（`wiki_ingest` / `wiki_capture` / `wiki_normalize_tags` / `wiki_lint` / `wiki_query` / `wiki_drill` / `wiki_read` / `wiki_export` / `wiki_mine` / `wiki_init` / `wiki_checkpoint` / `wiki_checkpoints` / `wiki_search_semantic`），并随包分发 5 个 `wiki-*` skill，无需额外配置。
+
+### 兼容的 DSH 版本
+
+| 插件版本 | DSH 基线 | 说明 |
+|---|---|---|
+| `2026.9.201` 及更早 | `dsh-v0.1.1-rc.2` / `dsh-v0.1.2-rc.1` | peer 精确锁定 `0.1.2-rc.1`，在 `0.2.x` 宿主上会被安装前校验判定为不兼容 |
+| **`2026.9.301`** | `dsh-v0.1.2-rc.1` ~ **`dsh-v0.2.0-rc.2`** | peer 改为双基线声明；在 `0.2.0-rc.2` 上完成 typecheck、构建、客户端打包与 354 项测试验证 |
+
+`peerDependencies` 现在写作 **`^0.1.2-rc.1 || ^0.2.0-rc.1`**，而不是常见的 `>=0.1.2-rc.1 <0.3.0`：按 semver 的预发布规则，
+`0.2.0-rc.2` 这类预发布版本只有在「比较符本身带同号预发布」时才被判定满足，因此 `>=0.1.2-rc.1 <0.3.0`
+**反而会把 `0.2.0-rc.2` 判为不满足**（宿主安装前校验会直接拒绝）。两条 `^` 分支各自声明一代基线才能同时覆盖两代宿主。
+
+侧边栏「知识库」标签依赖 **`dsh-better-sidebar`**（客户端 `dsh.client.inject: ["betterSidebar"]`）。
+它不在本包依赖里，需要作为 profile 的直接依赖单独安装，且版本要与宿主同基线：
+
+```bash
+dsh plugin --profile web add dsh-better-sidebar@^0.24.1
+```
+
+### 本地开发
+
+```bash
+npm install        # 需要 @deepseek-ai/dsh-* 的 0.2.0-rc.2 typings
+npm run typecheck        # 宿主侧类型检查
+npm run check:client     # 客户端类型检查
+npm run build            # tsc → lib/
+npm run build:client     # tsdown → client/client.js
+npm test                 # 354 项测试（node --test）
+npm run verify           # 以上全部
+```
+
+> `@tobilu/qmd` 是**可选 peer**（语义检索用）。未安装时 `wiki_search_semantic` 走「未就绪」分支，
+> 且 `semantic-index.test.mjs` 中依赖真实库的那条用例会自动跳过（不再误报失败）。
 
 ## v1 能力
 
