@@ -40,6 +40,28 @@ dsh plugin --profile web add ./dsh-knj-obsidian-2026.9.301.tgz
 dsh plugin --profile web add dsh-better-sidebar@^0.24.1
 ```
 
+> **它是硬依赖，不是可选项。** 客户端 bundle 的 `inject` 里声明了 `betterSidebar`，而 DSH 的客户端引导在
+> 任何条目非 active 时都会直接抛错。缺它时的现场是：界面报 `Failed to load plugins`，控制台给出
+> `web boot: 1 entry did not activate` + `dsh-knj-obsidian: pending (waiting for service: betterSidebar)`——
+> 此时不只是「知识库」标签不出现，**整个客户端引导都会失败**。所以先装好 `dsh-better-sidebar` 再装本插件。
+> 客户端加载器没有「可选注入」语法（`dsh.client.inject` 只接受字符串数组），因此无法在插件侧软化为可选。
+
+### 从 Git 安装（`github:` 依赖）时的已知限制
+
+本仓库的 `.gitignore` 忽略 `lib/`，且 `scripts` 里没有 `prepare` / `prepublishOnly` 钩子，而
+`package.json` 的 `main` 指向 `lib/index.js`、`files` 又声明了 `lib`。结果是：**任何 `github:` 形式的安装
+（`npm i github:<owner>/dsh-knj-obsidian`、profile 里的 git 依赖）
+会得到一个没有入口文件的包**——插件随后加载失败，报错点与会看到的现象都不指向真正原因。
+
+建议维护者二选一（我们这边为了立刻可用，是在一个附加分支上提交构建产物）：
+
+1. 把 `lib/`（以及 `lib/types/`）移出 `.gitignore`，让仓库自带可运行产物；或
+2. 在 `scripts` 里加 `"prepare": "npm run build && npm run build:client"`。
+   注意 pnpm 11 默认会拦截依赖的构建脚本（`ERR_PNPM_IGNORED_BUILDS`），走这条路需要用户显式放行，
+   所以从「开箱即用」看第 1 种更稳。
+
+顺带一提：`npm publish` 也依赖同一份文件清单，没有 `prepublishOnly` 构建时同样会发出缺 `lib/` 的 tarball。
+
 ### 本地开发
 
 ```bash
