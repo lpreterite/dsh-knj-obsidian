@@ -25,11 +25,13 @@ dsh plugin --profile web add ./dsh-knj-obsidian-2026.9.301.tgz
 | 插件版本 | DSH 基线 | 说明 |
 |---|---|---|
 | `2026.9.201` 及更早 | `dsh-v0.1.1-rc.2` / `dsh-v0.1.2-rc.1` | peer 精确锁定 `0.1.2-rc.1`，在 `0.2.x` 宿主上会被安装前校验判定为不兼容 |
-| **`2026.9.301`** | `dsh-v0.1.2-rc.1` ~ **`dsh-v0.2.0-rc.2`** | peer 改为双基线声明；在 `0.2.0-rc.2` 上完成 typecheck、构建、客户端打包与 354 项测试验证 |
+| **`2026.9.301`** | `dsh-v0.1.2-rc.1` ~ **`dsh-v0.2.0-rc.2`** | peer 改为双基线声明并把 0.2 分支收口到实测版本；在 `0.2.0-rc.2` 上完成 typecheck、构建、客户端打包与 354 项测试验证，另加 peer 范围双解析模式检查 |
 
-`peerDependencies` 现在写作 **`^0.1.2-rc.1 || ^0.2.0-rc.1`**，而不是常见的 `>=0.1.2-rc.1 <0.3.0`：按 semver 的预发布规则，
-`0.2.0-rc.2` 这类预发布版本只有在「比较符本身带同号预发布」时才被判定满足，因此 `>=0.1.2-rc.1 <0.3.0`
-**反而会把 `0.2.0-rc.2` 判为不满足**（宿主安装前校验会直接拒绝）。两条 `^` 分支各自声明一代基线才能同时覆盖两代宿主。
+`peerDependencies` 现在写作 **`^0.1.2-rc.1 || >=0.2.0-rc.1 <0.2.1-0`**。说明两件事：
+
+- **为什么要有 `>=0.2.0-rc.1` 这一支**：它的 `[major,minor,patch]` 是 `0.2.0` **且自带预发布**，这正是 npm/pnpm 默认解析器接受 `0.2.0-rc.2` 的条件。写成单范围 `>=0.1.2-rc.1 <0.2.1-0` 能过宿主的组装期校验（那里用 `includePrerelease: true`），却会让 `dsh plugin add` 报 **ERESOLVE**。
+- **为什么上界收口到 `<0.2.1-0`**：只声明实测过的 0.2 版本。`0.1.5 → 0.1.7` 曾一次性打断所有按 `0.1.5-alpha.1` 构建的插件，一路放行整个 0.2.x 是兑现不了的承诺；收口后若 0.2.1 出问题，会在组装期点名版本失败，而不是拖到运行期出现「不报错的怪症状」。
+- `npm run test:peers` 用「宿主 gate」与「npm 默认解析」两种模式逐个断言受管 peer，并自带 `--selftest` 已知行为自校准，防止上面的坑回来。
 
 侧边栏「知识库」标签依赖 **`dsh-better-sidebar`**（客户端 `dsh.client.inject: ["betterSidebar"]`）。
 它不在本包依赖里，需要作为 profile 的直接依赖单独安装，且版本要与宿主同基线：
@@ -47,6 +49,7 @@ npm run check:client     # 客户端类型检查
 npm run build            # tsc → lib/
 npm run build:client     # tsdown → client/client.js
 npm test                 # 354 项测试（node --test）
+npm run test:peers       # peer 范围双解析模式检查（含 --selftest 自校准）
 npm run verify           # 以上全部
 ```
 

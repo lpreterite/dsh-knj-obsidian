@@ -46,8 +46,8 @@
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-llm": "^0.1.2-rc.1 || ^0.2.0-rc.1",
-    "@deepseek-ai/dsh-tools": "^0.1.2-rc.1 || ^0.2.0-rc.1",
+    "@deepseek-ai/dsh-llm": "^0.1.2-rc.1 || >=0.2.0-rc.1 <0.2.1-0",
+    "@deepseek-ai/dsh-tools": "^0.1.2-rc.1 || >=0.2.0-rc.1 <0.2.1-0",
     "@tobilu/qmd": "^2.8.3"
   },
   "peerDependenciesMeta": {
@@ -95,7 +95,8 @@
     "build:client": "tsdown -c tsdown.config.ts",
     "check:client": "tsc -p tsconfig.client.json --noEmit",
     "test": "node --test *.test.mjs",
-    "verify": "npm run typecheck && npm run check:client && npm run build && npm run build:client && npm test",
+    "test:peers": "node test/compat/check-peer-ranges.js",
+    "verify": "npm run typecheck && npm run check:client && npm run build && npm run build:client && npm run test:peers && npm test",
     "check": "npm run typecheck && npm run build"
   },
   "dependencies": {
