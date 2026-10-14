@@ -5958,7 +5958,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 					fetchVaults().then((r) => {
 						if (!alive) return;
 						setVaultRoot(r.current?.root ?? null);
-						setInitialized(r.vaults.find((v) => v.id === r.current?.id)?.initialized ?? true);
+						setInitialized(r.vaults.find((v) => v.id === r.current?.id)?.initialized ?? null);
 					}).catch(() => {
 						if (alive) setInitialized(null);
 					});
@@ -6062,17 +6062,18 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			}, [scopedSessions, query]);
 			const shown = filtered.slice(0, MAX_RENDERED_SESSIONS);
 			const effectiveIds = (0, react.useMemo)(() => [.../* @__PURE__ */ new Set([...sessionIds, ...parseManualIds(manualIds)])], [sessionIds, manualIds]);
-			/** 允许建会话的唯一条件：库根已知**且库已初始化**（injection 见下方 guard）。
-			*  库根未知或未初始化时宁可不建会话——未初始化库上入库会隐式 ensure 建库，
-			*  与「注册 ≠ 初始化」契约冲突（初始化是显式的 wiki_init 动作）。 */
-			const canStartSession = Boolean(vaultRoot) && initialized !== false;
+			/** 允许建会话的唯一条件：库根已知**且已确认初始化**。
+			*  库根未知或未初始化/状态未知时宁可不建会话——未初始化库上入库会隐式 ensure 建库，
+			*  与「注册 ≠ 初始化」契约冲突（初始化是显式的 wiki_init 动作）；而"状态未知"曾被 `?? true`
+			*  兜底成"已初始化"，导致预填一个不存在的库路径（2026-10-13 实测）。 */
+			const canStartSession = Boolean(vaultRoot) && initialized === true;
 			const send = async (text, okText) => {
 				if (!vaultRoot) {
 					setMessage("未能确定当前库根目录（/vaults 读取失败）：请点刷新后重试，或改用「复制触发指令」。");
 					return;
 				}
-				if (initialized === false) {
-					setMessage("当前库尚未初始化（磁盘上没有 .wiki）：请先点上面的「初始化知识库」，建好后再蒸馏；也可「复制触发指令」自行处理。");
+				if (initialized !== true) {
+					setMessage(initialized === false ? "当前库尚未初始化（磁盘上没有 .wiki）：请先点上面的「初始化知识库」，建好后再蒸馏；也可「复制触发指令」自行处理。" : "当前库的初始化状态未知（/vaults 未返回该库）：请点刷新后重试；为避免把知识写进一个不存在的库，这里不预填指令。");
 					return;
 				}
 				const res = startAgentSession ? await startAgentSession(text, vaultRoot) : {
@@ -6146,16 +6147,21 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 							"，不读取其他工作区会话、不参与知识检索。"
 						]
 					}),
-					initialized === false && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+					initialized !== true && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 						className: "knj-banner knj-banner--warn",
 						children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 							className: "knj-vcol",
 							style: { gap: 6 },
-							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
+							children: [initialized === false ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
 								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "当前库尚未初始化" }),
 								"：磁盘上还没有 ",
 								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("code", { children: ".wiki" }),
 								"，蒸馏结果无处入库。"
+							] }) : /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "无法确认当前库的初始化状态" }),
+								"：",
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("code", { children: "/vaults" }),
+								" 没返回该库。为避免把知识写进一个不存在的库，这里不预填蒸馏指令。"
 							] }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 								className: "knj-pop__row",
 								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {

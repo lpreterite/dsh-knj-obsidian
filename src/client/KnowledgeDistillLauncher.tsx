@@ -169,7 +169,11 @@ export function KnowledgeDistillLauncher({ startAgentSession, sessions, workspac
         .then((r) => {
           if (!alive) return
           setVaultRoot(r.current?.root ?? null)
-          setInitialized(r.vaults.find((v) => v.id === r.current?.id)?.initialized ?? true)
+          // ⚠️ 这里**不能**用 `?? true` 兜底（2026-10-13 实测踩到）：
+          // 当前库在注册表里找不到时 `initialized` 变成「未知」，而下游只拦 `=== false`，
+          // 于是"未知"被当成"已初始化"，照样预填一个**不存在的库路径**——蒸馏会话因此空转约 20 次
+          // 探测、并当场把库建在别处。未知必须与未初始化同样对待：`canStartSession` 只在 `=== true` 时放行。
+          setInitialized(r.vaults.find((v) => v.id === r.current?.id)?.initialized ?? null)
         })
         .catch(() => { if (alive) setInitialized(null) })
       fetchCheckpoints()
@@ -252,10 +256,11 @@ export function KnowledgeDistillLauncher({ startAgentSession, sessions, workspac
     [sessionIds, manualIds],
   )
 
-  /** 允许建会话的唯一条件：库根已知**且库已初始化**（injection 见下方 guard）。
-   *  库根未知或未初始化时宁可不建会话——未初始化库上入库会隐式 ensure 建库，
-   *  与「注册 ≠ 初始化」契约冲突（初始化是显式的 wiki_init 动作）。 */
-  const canStartSession = Boolean(vaultRoot) && initialized !== false
+  /** 允许建会话的唯一条件：库根已知**且已确认初始化**。
+   *  库根未知或未初始化/状态未知时宁可不建会话——未初始化库上入库会隐式 ensure 建库，
+   *  与「注册 ≠ 初始化」契约冲突（初始化是显式的 wiki_init 动作）；而"状态未知"曾被 `?? true`
+   *  兜底成"已初始化"，导致预填一个不存在的库路径（2026-10-13 实测）。 */
+  const canStartSession = Boolean(vaultRoot) && initialized === true
 
   const send = async (text: string, okText: string) => {
     // 新会话必须归属当前库所在工作区：库根未知时宁可不建，也不要落到默认工作区
@@ -263,9 +268,11 @@ export function KnowledgeDistillLauncher({ startAgentSession, sessions, workspac
       setMessage('未能确定当前库根目录（/vaults 读取失败）：请点刷新后重试，或改用「复制触发指令」。')
       return
     }
-    // 未初始化库：不建会话、不预填蒸馏指令，改为引导初始化
-    if (initialized === false) {
-      setMessage('当前库尚未初始化（磁盘上没有 .wiki）：请先点上面的「初始化知识库」，建好后再蒸馏；也可「复制触发指令」自行处理。')
+    // 未初始化（或状态未知）：不建会话、不预填蒸馏指令，改为引导初始化
+    if (initialized !== true) {
+      setMessage(initialized === false
+        ? '当前库尚未初始化（磁盘上没有 .wiki）：请先点上面的「初始化知识库」，建好后再蒸馏；也可「复制触发指令」自行处理。'
+        : '当前库的初始化状态未知（/vaults 未返回该库）：请点刷新后重试；为避免把知识写进一个不存在的库，这里不预填指令。')
       return
     }
     const res = startAgentSession
@@ -330,10 +337,14 @@ export function KnowledgeDistillLauncher({ startAgentSession, sessions, workspac
       不支持：TypeScript、Python、Go、任意 ORM、JSON Schema。
       <br />会话侧：原始归档只写入 <code>&lt;vault&gt;/_system/dsh-sessions/</code>，不读取其他工作区会话、不参与知识检索。</div>
 
-    {initialized === false && (
+    {initialized !== true && (
       <div className="knj-banner knj-banner--warn">
         <span className="knj-vcol" style={{ gap: 6 }}>
-          <span><strong>当前库尚未初始化</strong>：磁盘上还没有 <code>.wiki</code>，蒸馏结果无处入库。</span>
+          {initialized === false ? (
+            <span><strong>当前库尚未初始化</strong>：磁盘上还没有 <code>.wiki</code>，蒸馏结果无处入库。</span>
+          ) : (
+            <span><strong>无法确认当前库的初始化状态</strong>：<code>/vaults</code> 没返回该库。为避免把知识写进一个不存在的库，这里不预填蒸馏指令。</span>
+          )}
           <span className="knj-pop__row">
             <button type="button" className="knj-btn knj-btn--primary" onClick={initVault}>初始化知识库</button>
             <span className="knj-pop__hint">把初始化指令交给当前对话 Agent（调用 wiki_init），建好后回来蒸馏。</span>

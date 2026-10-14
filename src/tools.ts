@@ -18,9 +18,13 @@ import { relatedHits } from './related-check.ts'
 import { createCheckpoint, listCheckpoints } from './checkpoint.ts'
 import { rebuildIndex } from './index-builder.ts'
 import {
-  createSemanticRuntime, clampLimit, runOfflineSearch, notReadyMessage, resolveStateHome, DEFAULT_MODEL_FILENAME,
+  createSemanticRuntime, runOfflineSearch, notReadyMessage, resolveStateHome, DEFAULT_MODEL_FILENAME,
   type SemanticHit, type SemanticRuntime,
 } from './semantic-index.ts'
+import {
+  semanticFallbackEnabled, semanticRuntimeFor, disposeSemanticRuntimes, workspaceNameOf,
+  clampLimit, semanticRawHits, type SemanticRuntimeFactory,
+} from './semantic-hits.ts'
 import { refresherFor, vaultRootOf } from './semantic-refresh.ts'
 import {
   drillQuery, drillPage, readPageDetail, drillEnabled,
@@ -166,42 +170,15 @@ function toSemanticPageHits(results: readonly SemanticHit[]): SemanticPageHit[] 
   return out
 }
 
-// ---------- 按库缓存语义运行时（与 refresherFor 同惯例：模块级注册表 + 全局 dispose） ----------
+// ---------- 语义运行时：按库缓存与开关已抽到 src/semantic-hits.ts ----------
 //
-// 为什么缓存：语义运行时一开就要加载本地 300M 嵌入模型，而兜底恰好发生在「多词查询」这种会
-// 反复出现的场景里；每次重建会把模型加载成本重复付一遍。创建失败不缓存（下次可重试）。
-const semanticRuntimes = new Map<string, Promise<SemanticRuntime | null>>()
-
-/**
- * 语义兜底开关：`KNJ_OBSIDIAN_SEMANTIC_FALLBACK=off` 时完全关闭。
- * 与 `KNJ_OBSIDIAN_AUTO_REFRESH=off` 同族：单元测试与离线环境用它避免加载 300M 嵌入模型、
- * 不去碰用户真实的 ~/.dsh/qmd（模型冷启动一次就要几十秒，测试里不可接受）。
- */
-export function semanticFallbackEnabled(): boolean {
-  return (process.env.KNJ_OBSIDIAN_SEMANTIC_FALLBACK ?? '').trim().toLowerCase() !== 'off'
-}
-
-function semanticRuntimeFor(
-  vaultRoot: string,
-  factory: (root: string) => Promise<SemanticRuntime>,
-): Promise<SemanticRuntime | null> {
-  const cached = semanticRuntimes.get(vaultRoot)
-  if (cached) return cached
-  const created = factory(vaultRoot).catch(() => null)
-  semanticRuntimes.set(vaultRoot, created)
-  return created
-}
-
-/** 关闭并清空所有缓存的语义运行时（插件 dispose 时调用，避免 sqlite 句柄与模型常驻）。 */
-export function disposeSemanticRuntimes(): void {
-  for (const pending of semanticRuntimes.values()) {
-    void pending.then((runtime) => { try { runtime?.store?.close?.() } catch { /* 关闭失败不影响退出 */ } })
-  }
-  semanticRuntimes.clear()
-}
+// 为什么抽出去：L1 任务级触发的字面兜底（trigger.ts）需要复用**同一个**按库根缓存的运行时——
+// 模型只加载一次，且触发层只接受「已热」的运行时（冷启动几十秒，不能挂住 pre-step）。
+// 此处只留工具侧的接线，语义语义（只读、降级、白名单）不变。
 
 export function mountTools(ctx: Context, provider: VaultProvider, opts: MountToolsOptions = {}): () => void {
-  const runtimeFactory = opts.semanticRuntimeFactory ?? ((root: string) => createSemanticRuntime({ vaultRoot: root }))
+  const runtimeFactory: SemanticRuntimeFactory =
+    opts.semanticRuntimeFactory ?? ((root: string) => createSemanticRuntime({ vaultRoot: root }))
 
   /**
    * 零候选时记一条未命中（诊断用）。**绝不影响检索结果**：只读、失败静默、开关可关。
@@ -219,7 +196,7 @@ export function mountTools(ctx: Context, provider: VaultProvider, opts: MountToo
       recordQueryMiss({
         at: new Date().toISOString(),
         vaultRoot,
-        workspace: basename(vaultRoot),
+        workspace: workspaceNameOf(vaultRoot),
         query,
         mode,
         totalPages: result.totalPages,
@@ -233,21 +210,12 @@ export function mountTools(ctx: Context, provider: VaultProvider, opts: MountToo
   /**
    * wiki_query 的语义兜底：词面几乎无果时调一次语义运行时，把命中交给 retrieve() 融合。
    * 任何不可用/失败（模型缺失、库缺失、索引为空、后端抛错）都返回空数组 → 调用方保持纯词面结果，
-   * 绝不抛错、不联网、不建索引。
+   * 绝不抛错、不联网、不建索引。（本函数**允许**惰性加载运行时；触发层用 requireWarm 那一路。）
    */
   async function semanticFallbackHits(query: string, limit: number): Promise<SemanticPageHit[]> {
-    if (!semanticFallbackEnabled()) return []
-    const store = currentReadonlyStore(provider)
-    const vaultRoot = provider.currentRecord()?.root ?? vaultRootOf(store)
-    const runtime = await semanticRuntimeFor(vaultRoot, runtimeFactory)
-    if (!runtime?.store) return []
-    if (runtime.status === 'index-empty') return []
-    try {
-      const outcome = await runOfflineSearch(runtime.store, query, limit)
-      return toSemanticPageHits(outcome.results)
-    } catch {
-      return []
-    }
+    const vaultRoot = provider.currentRecord()?.root ?? vaultRootOf(currentReadonlyStore(provider))
+    const hits = await semanticRawHits({ vaultRoot, query, limit, factory: runtimeFactory })
+    return toSemanticPageHits(hits)
   }
 
   ctx.tools.register(defineTool({

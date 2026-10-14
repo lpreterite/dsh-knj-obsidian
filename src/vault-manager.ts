@@ -37,6 +37,35 @@ function defaultNameFor(root: string, seeds: WorkspaceSeed[]): string {
   return basename(r) || r
 }
 
+/**
+ * 从某个目录向上找最近的 `.wiki`（含自身），但**不得越过注册过的工作区/库根边界**。
+ *
+ * 为什么需要它：会话的 `header.cwd` 是**会话工作目录**，而库在工作区根；cwd 可能是子目录。
+ * 只按 cwd 精确匹配根会漏掉「在子目录里跑会话」这种常见情况，于是提示又变成沉默/答偏。
+ *
+ * 为什么必须有边界（2026-09-28 实测踩到）：无边界时会一路走到 `C:\Users\<user>\.wiki`
+ * ——用户的 home 本身被宿主注册成了「工作区库」，于是「在 A 项目里问 A 的事」被 home 库命中。
+ * 边界规则（自内向外，先到先判）：
+ *   - 命中 .wiki → 就是它；
+ *   - 命中「已注册的根」（工作区或库）却没 .wiki → 该工作区没有库，**不再向外走**；
+ *   - 走到盘符根/上限 → 没有。
+ *
+ * @param from - 起始目录（绝对路径）
+ * @param boundaryOf - 已注册根（resolve 后）的集合；undefined = 不设边界（仅限测试/单库场景）
+ * @returns 含 `.wiki` 的最近祖先目录；找不到返回 undefined
+ */
+export function nearestVaultRoot(from: string, boundaryOf?: ReadonlySet<string>): string | undefined {
+  let current = resolve(from)
+  for (let depth = 0; depth < 12; depth += 1) {
+    if (existsSync(join(current, '.wiki'))) return current
+    if (boundaryOf?.has(current)) return undefined
+    const parent = dirname(current)
+    if (parent === current) return undefined
+    current = parent
+  }
+  return undefined
+}
+
 export class VaultManager implements VaultProvider {
   private registry: RegistryFile = { version: 1, currentVaultId: null, vaults: [] }
   private readonly seeds: WorkspaceSeed[]
@@ -155,6 +184,51 @@ export class VaultManager implements VaultProvider {
     const rec = this.currentRecord()
     if (!rec) return this.storeFor(this.opts.cwdRoot, false)
     return this.storeFor(rec.root, false)
+  }
+
+  /**
+   * 按目录取**只读**库（会话级绑定用，L0）。
+   *
+   * 契约（与 currentReadonly 同族，比它更严）：**零写盘**——不 ensure()、不建目录、不写注册表。
+   * 这是必要的：会话级绑定发生在 `agent/session-start`，如果它会写盘，等在一个还没有知识库的
+   * 工作区里就会凭空长出 `.wiki` 和 7 个分类目录（trigger.ts 的只读契约明确禁止）。
+   *
+   * 解析顺序：
+   *   1) 已注册的库根（拿注册名）；
+   *   2) 向上找最近的 `.wiki`（cwd 常是工作区子目录）；
+   *   3) 磁盘上确实存在 `.wiki` 的根（未注册也能用，名取目录名）。
+   *
+   * @param root - 会话工作目录（绝对路径）
+   * @returns 只读库 + 展示名；无库返回 undefined
+   */
+  readonlyVaultForRoot(root: string): { store: VaultStore; name: string } | undefined {
+    const r = resolve(root)
+    const registered = this.registry.vaults.find((v) => resolve(v.root) === r)
+    if (registered && existsSync(join(registered.root, '.wiki'))) {
+      return { store: this.storeFor(registered.root, false), name: registered.name }
+    }
+    const nearest = nearestVaultRoot(r, this.knownRoots())
+    if (!nearest) return undefined
+    const hit = this.registry.vaults.find((v) => resolve(v.root) === nearest)
+    return {
+      store: this.storeFor(nearest, false),
+      name: hit?.name ?? defaultNameFor(nearest, this.seeds),
+    }
+  }
+
+  /** 向上查找的边界：所有已注册的库根 + 工作区种子（都不会被越过）。 */
+  private knownRoots(): Set<string> {
+    const roots = new Set<string>()
+    roots.add(resolve(this.opts.cwdRoot))
+    for (const v of this.registry.vaults) roots.add(resolve(v.root))
+    for (const s of this.seeds) roots.add(resolve(s.path))
+    return roots
+  }
+
+  /** 注册表里按根查库（拿展示名；零写盘）。 */
+  recordForRoot(root: string): VaultRecord | undefined {
+    const r = resolve(root)
+    return this.registry.vaults.find((v) => resolve(v.root) === r)
   }
 
   switchVault(id: string): VaultRecord | null {
