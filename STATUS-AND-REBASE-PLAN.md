@@ -14,7 +14,7 @@
 | 安装引用 | `~/.dsh/profiles/web/package.json` → `file:/home/admin/.dsh/local-plugins/dsh-knj-obsidian-2026.10.140-p5.tgz` |
 | 回滚方式 | `dsh plugin install ~/.dsh/local-plugins/dsh-knj-obsidian-2026.9.301-p2.tgz --profile web` 后重启 dsh-web |
 | 分支 | `feat/dsh020-rebase` = main(1560988) + PR#2 四提交 + p5 三提交（见执行记录） |
-| 语义通道 | 仍不可用：`@tobilu/qmd` 从未装进 profile（p2 时代同样不可用，非本次回归）；启用需把 `@tobilu/qmd` 装进 web profile（README 内网部署说明） |
+| 语义通道 | ✅ 已启用（2026-10-22）：`@tobilu/qmd@2.8.3` 显式装入 web profile，`available:true / modelPresent:true`；详见「八、语义检索启用记录」 |
 
 ## 一、本机部署现状（运行中，勿破坏）
 
@@ -159,6 +159,15 @@ df90b15 docs: …git-install trap                          ← PR#2 de59384
 
 - [ ] 边栏「知识库」标签与图谱视图：请在本机 GUI 里过一眼
 - [x] 挂接 vault 不再 403（API 层已验证）
-- [x] 关键词检索正常（wiki_query；语义通道受 qmd 未装影响，见「〇」）
+- [x] 关键词检索正常（wiki_query；语义通道已启用，见「八」）
 - [x] **`~/.dsh/skills/wiki-*` 手动符号链接已移除**（2026-10-22）：自动注册已三重确证——①启动日志无 provider 警告且无 skills pending；②`src/skill-provider.ts:87` 包根从 `import.meta.url` 自解析，装进包内即指向正确位置；③用安装包内编译产物按运行时同路径实测 `createSkillProvider().list()` 返回全部 5 个 skill。如需还原：`ln -s ~/.dsh/profiles/web/node_modules/dsh-knj-obsidian/wiki-{collect,distill,init,mine,query} ~/.dsh/skills/`
 - [x] trigger 四层开关默认值符合预期（`KNJ_OBSIDIAN_TRIGGER*` 系列默认开、`off` 显式关；`KNJ_OBSIDIAN_GATE`/`WRITE_GATE` 默认 off）
+
+## 八、语义检索启用记录（2026-10-22）
+
+1. **安装**：`dsh plugin --profile web add @tobilu/qmd@2.8.3`。首次执行报 `ERR_PNPM_IGNORED_BUILDS`——pnpm v12 默认拦截构建脚本，包已落盘但 node-llama-cpp/tree-sitter 系未构建。
+2. **批准构建**：dsh 的白名单在 profile 的 `pnpm-workspace.yaml` `allowBuilds:` 键（package.json 的 `pnpm.onlyBuiltDependencies` 在 pnpm v12 不生效，勿用）。追加了 `node-llama-cpp` 与 `tree-sitter-{go,javascript,python,rust,typescript}` 六项后重跑 add，全部构建成功。
+3. **重启**：kill node 子进程，systemd 拉起。`GET /api/obsidian-wiki/semantic-status` → `available:true, modelPresent:true`（此前一直是 `library-missing`）。
+4. **模型**：`~/.dsh/qmd/models/embeddinggemma-300M-Q8_0.gguf`（333MB）文件名与 `DEFAULT_MODEL_FILENAME` 一致，无需动作。查询扩展/精排模型被插件钉死在本地不存在路径，全程零联网。
+5. **各库页面数实测**（索引只认 `.wiki/七分类/*.md`，vault 根下的其他目录对插件不可见）：wiki 根库 0 页（纯脚手架，`proposal/` 等内容不在七分类下）、psyche 1 页、bili-mcp 21 页、叶帕奇 9 页。
+6. **索引入口**：`POST /api/obsidian-wiki/semantic-update`（后台单飞，进度轮询 `GET semantic-status`），等价于边栏「更新索引」按钮。索引落在 `~/.dsh/qmd/index.sqlite`，不进 vault。
