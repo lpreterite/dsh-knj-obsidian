@@ -78,7 +78,6 @@
     "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
     "@deepseek-ai/dsh-user-approval": "0.2.0-rc.2",
-    "@rolldown/binding-win32-x64-msvc": "^1.2.6",
     "@tobilu/qmd": "^2.8.3",
     "@types/node": "^22.0.0",
     "@types/react": "~18.3.1",
