@@ -160,5 +160,5 @@ df90b15 docs: …git-install trap                          ← PR#2 de59384
 - [ ] 边栏「知识库」标签与图谱视图：请在本机 GUI 里过一眼
 - [x] 挂接 vault 不再 403（API 层已验证）
 - [x] 关键词检索正常（wiki_query；语义通道受 qmd 未装影响，见「〇」）
-- [ ] **`~/.dsh/skills/wiki-*` 手动符号链接暂未移除**：skill 自动注册（`src/skill-provider.ts`）无法从宿主外部确证是否生效，catalog 当前无重复条目，符号链接仍指向 p5 包内同路径；确认 GUI skill 正常后可删
+- [x] **`~/.dsh/skills/wiki-*` 手动符号链接已移除**（2026-10-22）：自动注册已三重确证——①启动日志无 provider 警告且无 skills pending；②`src/skill-provider.ts:87` 包根从 `import.meta.url` 自解析，装进包内即指向正确位置；③用安装包内编译产物按运行时同路径实测 `createSkillProvider().list()` 返回全部 5 个 skill。如需还原：`ln -s ~/.dsh/profiles/web/node_modules/dsh-knj-obsidian/wiki-{collect,distill,init,mine,query} ~/.dsh/skills/`
 - [x] trigger 四层开关默认值符合预期（`KNJ_OBSIDIAN_TRIGGER*` 系列默认开、`off` 显式关；`KNJ_OBSIDIAN_GATE`/`WRITE_GATE` 默认 off）
