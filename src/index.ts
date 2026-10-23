@@ -80,15 +80,20 @@ export function apply(ctx: Context, rawConfig?: unknown): void {
     const disposeRoutes = mountWikiRoutes(host, manager)
     // 任务级知识触发（L0/L1/L3）+ 可选闸门：只读、不阻断，KNJ_OBSIDIAN_TRIGGER=off 可关。
     const disposeTrigger = installTrigger(hostCtx as unknown as TriggerHost, manager)
-    // 设置 HTTP 通道（非 loopback 页面官方表单不可用；经宿主 SettingsForms 读写，见 settings.ts）
-    const disposeSettingsHttp = mountSettingsHttp(ctx, hostCtx)
     return () => {
       disposeTools()
       disposeRoutes()
       disposeTrigger()
-      disposeSettingsHttp()
       disposeSkills()
       setResolvedConfig(undefined)
     }
+  })
+  // 设置 HTTP 通道：**独立 inject 片段**，且 'settings' 必须显式声明——
+  // p7 实机踩坑：动态回调里对未声明服务的防御式读取（host.settings / host.get('settings')）
+  // 拿不到 cordis 0.2.0 的 settings 服务（未声明即不可见），路由静默不注册 →
+  // /api/obsidian-wiki/config 404。声明式注入后与 dsh-self-improved 同构。
+  // 该 fragment 若失败（极端裁剪宿主无 settings）只损失 HTTP 通道，不牵连 tools/routes/skills。
+  ctx.inject(['settings', 'webServer'], (svcCtx: Context) => {
+    mountSettingsHttp(ctx, svcCtx)
   })
 }
