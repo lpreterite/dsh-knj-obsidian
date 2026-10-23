@@ -15,16 +15,17 @@ import {
   type SemanticHit, type SemanticRuntime,
 } from './semantic-index.ts'
 import { semanticRuntimeFactoryFor } from './semantic-remote.ts'
+import { semanticFallbackOff } from './settings.ts'
 import type { SemanticPageHit } from './retriever.ts'
 import type { WikiCategory } from './types.ts'
 
 /**
- * 语义兜底开关：`KNJ_OBSIDIAN_SEMANTIC_FALLBACK=off` 时完全关闭。
- * 与 `KNJ_OBSIDIAN_AUTO_REFRESH=off` 同族：单元测试与离线环境用它避免加载 300M 嵌入模型、
- * 不去碰用户真实的 ~/.dsh/qmd（模型冷启动一次就要几十秒，测试里不可接受）。
+ * 语义兜底开关：优先级 env 覆盖 > 设置面板 > 默认开。
+ * `KNJ_OBSIDIAN_SEMANTIC_FALLBACK=off` 一律关闭（含触发层）；面板 semanticFallback=false 同效。
+ * 单元测试与离线环境用它避免加载 300M 嵌入模型、不去碰用户真实的 ~/.dsh/qmd。
  */
 export function semanticFallbackEnabled(): boolean {
-  return (process.env.KNJ_OBSIDIAN_SEMANTIC_FALLBACK ?? '').trim().toLowerCase() !== 'off'
+  return !semanticFallbackOff()
 }
 
 /** 创建语义运行时的可注入点（测试替换；默认按 KNJ_OBSIDIAN_EMBED 分派 local/remote/off）。 */

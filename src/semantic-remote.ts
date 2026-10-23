@@ -24,24 +24,13 @@ import {
   type SemanticStore,
   type SemanticStatusRaw,
 } from './semantic-index.ts'
+import { effectiveEmbedConfig, REMOTE_EMBED_DEFAULTS, type RemoteEmbedConfig } from './settings.ts'
 
-/** 远程嵌入配置（env 解析产物；测试可直接构造）。 */
-export interface RemoteEmbedConfig {
-  provider: 'local' | 'remote' | 'off'
-  /** OpenAI 兼容根地址（含 /v1），如 http://100.93.42.43:8090/v1 */
-  url?: string
-  apiKey?: string
-  /** 嵌入模型名（请求体 model 字段），默认 baai/bge-m3 */
-  model: string
-  /** 期望向量维度；不设则采用首次返回的长度并在其后强制一致 */
-  dims?: number
-  batch: number
-  timeoutMs: number
-}
+// 配置常量/类型的真身在 settings.ts（避免循环依赖）；此处转出保持既有引用面不变
+export { REMOTE_EMBED_DEFAULTS } from './settings.ts'
+export type { RemoteEmbedConfig } from './settings.ts'
 
-export const REMOTE_EMBED_DEFAULTS = { model: 'baai/bge-m3', batch: 16, timeoutMs: 30_000 } as const
-
-/** 解析 KNJ_OBSIDIAN_EMBED* 环境变量（大小写不敏感；未知值回退 local 并不报错）。 */
+/** 解析 KNJ_OBSIDIAN_EMBED* 环境变量（纯 env 版，供测试与对照；运行时入口走 settings.effectiveEmbedConfig）。 */
 export function remoteEmbedConfigFromEnv(env: Record<string, string | undefined> = process.env): RemoteEmbedConfig {
   const raw = (env.KNJ_OBSIDIAN_EMBED ?? '').trim().toLowerCase()
   const provider: RemoteEmbedConfig['provider'] = raw === 'remote' ? 'remote' : raw === 'off' ? 'off' : 'local'
@@ -375,7 +364,8 @@ export async function selectSemanticRuntime(opts: {
   /** 测试注入：跳过环境变量读取。 */
   config?: RemoteEmbedConfig
 }): Promise<SemanticRuntime | null> {
-  const config = opts.config ?? remoteEmbedConfigFromEnv()
+  // 优先级：opts.config（测试注入）> env（临时覆盖）> 设置面板 > 内置默认
+  const config = opts.config ?? effectiveEmbedConfig()
   if (config.provider === 'off') return null
   if (config.provider === 'remote') {
     return createRemoteSemanticRuntime({ vaultRoot: opts.vaultRoot, home: opts.home, config, fetchImpl: opts.fetchImpl })

@@ -15,6 +15,7 @@ import {
   type SemanticStore,
 } from './semantic-index.ts'
 import { semanticRuntimeFactoryFor } from './semantic-remote.ts'
+import { autoRefreshOff } from './settings.ts'
 
 export interface SemanticRuntimeView {
   status: SemanticState
@@ -191,8 +192,8 @@ export function createRefresher(opts: RefresherOptions): Refresher {
 
   function schedule(): void {
     if (disposed) return
-    // 关掉自动刷新（仍可用边栏「更新索引」手动跑）：KNJ_OBSIDIAN_AUTO_REFRESH=off
-    if ((process.env.KNJ_OBSIDIAN_AUTO_REFRESH ?? '').trim().toLowerCase() === 'off') return
+    // 关掉自动刷新（仍可用边栏「更新索引」手动跑）：优先级 env 覆盖 > 设置面板 > 默认开
+    if (autoRefreshOff(process.env)) return
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => { void fire() }, debounceMs)
     // 后台任务不阻止宿主退出

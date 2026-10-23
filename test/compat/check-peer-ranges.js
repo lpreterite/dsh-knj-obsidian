@@ -157,6 +157,14 @@ function satisfies(version, range, options = {}) {
 // ── 策略与检查 ────────────────────────────────────────────────────────────────
 /** 本仓库声明支持、并已在真实 profile 上跑过的 DSH 基线。 */
 const SUPPORTED_BASELINES = ['0.1.2-rc.1', '0.2.0-rc.2']
+/**
+ * 每-peer 基线覆盖：声明晚于仓库基线的包只查它真实存在的宿主线。
+ * 例：@deepseek-ai/dsh-settings 首发于 0.2.0 线（0.1.2-rc.1 宿主上根本没有这个包），
+ * 且本插件把它声明为 optional peer——宿主没有时设置通道静默降级，不影响 tools/routes。
+ */
+const PEER_BASELINE_OVERRIDES = {
+  '@deepseek-ai/dsh-settings': ['0.2.0-rc.2'],
+}
 /** 用于说明范围宽窄的代表性版本（只做展示，不影响退出码）。 */
 const MATRIX_VERSIONS = [
   '0.1.5-rc.2', '0.1.2-rc.1', '0.1.7', '0.1.8',
@@ -244,7 +252,11 @@ if (gated.length === 0) {
 let bad = 0
 const report = { package: manifest.name, version: manifest.version, checks: [] }
 for (const version of targets) {
-  const rows = evaluate(manifest, version)
+  // 每-peer 基线覆盖：该 peer 未声明支持的宿主线直接跳过（不算失败，也不计入通过行）
+  const rows = evaluate(manifest, version).filter((row) => {
+    const baselines = PEER_BASELINE_OVERRIDES[row.name]
+    return baselines === undefined || baselines.includes(version)
+  })
   report.checks.push({ version, peers: rows })
   for (const row of rows) {
     if (!row.runtime) {

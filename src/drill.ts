@@ -13,6 +13,7 @@ import { buildGraph } from './graph-engine.ts'
 import type { GraphData } from './graph-engine.ts'
 import { retrieve, linkedPages, TIER_WEIGHT, RETRIEVAL_CATEGORIES } from './retriever.ts'
 import type { RetrievalCandidate } from './retriever.ts'
+import { drillOff } from './settings.ts'
 import { mapHitsToPages } from './semantic.ts'
 import type { SemanticState } from './semantic-index.ts'
 
@@ -111,9 +112,9 @@ const DEGREE_STEP = 0.1
 const MAX_DEGREE_BONUS = 2
 const MAX_SNIPPET = 200
 
-/** 新链路的开关：KNJ_OBSIDIAN_DRILL=off 时工具立即返回关闭文案（与 SEMANTIC_FALLBACK 同族但独立）。 */
+/** 新链路的开关：优先级 env 覆盖 > 设置面板 > 默认开（KNJ_OBSIDIAN_DRILL=off 或面板 drill=false 关闭）。 */
 export function drillEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return String(env.KNJ_OBSIDIAN_DRILL ?? '').toLowerCase() !== 'off'
+  return !drillOff(env)
 }
 
 function clamp(value: number | undefined, fallback: number, max: number): number {
