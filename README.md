@@ -570,9 +570,11 @@ v16 开始把 18 个 `KNJ_OBSIDIAN_*` 环境变量迁入 DSH 设置页（issue #
   >=0.2.0-rc.1 <0.3.0` 双线收口）；宿主没有 settings 服务时 HTTP 通道静默跳过，不影响
   tools/routes。peer 基线校验器新增 `PEER_BASELINE_OVERRIDES`（首发晚于仓库基线的包只查其
   真实存在的宿主线）
-- **第二批（未做）**：触发/闸门组 8 个（`TRIGGER` / `TRIGGER_FULLTEXT` / `VAULT_IDENTITY` /
-  `TRIGGER_RECURRENCE` / `TRIGGER_SUBAGENT` / `GATE` / `WRITE_GATE` / `MISS_LOG`）——判据散在
-  trigger.ts 多处，需逐一换读取点，见 issue #2
+- **第二批（本版完成）**：触发/闸门组 8 个（`TRIGGER` / `TRIGGER_FULLTEXT` / `VAULT_IDENTITY` /
+  `TRIGGER_RECURRENCE` / `TRIGGER_SUBAGENT` / `GATE` / `WRITE_GATE` / `MISS_LOG`）——trigger.ts /
+  miss-log.ts 的 8 个开关函数原签名改为委托 settings 裁决器，导出面零变化；
+  `GATE` / `WRITE_GATE` 枚举保持原语义（env 非空即完全接管，仅 warn|block / ask|block 有效）。
+  **至此 18 个环境变量全部可在设置页配置，issue #2 收口**
 
 ## 路线
 
