@@ -1,6 +1,6 @@
 // src/skill-provider.ts
 /**
- * 把包内随发的 skill bundle（wiki-collect / wiki-mine / wiki-distill / wiki-init / wiki-query）
+ * 把包内随发的 skill bundle（wiki-collect / wiki-docs / wiki-mine / wiki-distill / wiki-init / wiki-query）
  * 注册进宿主 skill registry。
  *
  * 为什么必须有它：DSH 的 filesystem skill provider 只扫 5 个本地根
@@ -33,6 +33,7 @@ export const SKILL_PROVIDER_NAME = 'dsh-knj-obsidian'
  */
 export const SKILL_BUNDLE_DIRS: readonly string[] = [
   'wiki-collect',
+  'wiki-docs',
   'wiki-mine',
   'wiki-distill',
   'wiki-init',
@@ -93,7 +94,7 @@ interface Frontmatter {
 }
 
 /**
- * 极简 frontmatter 解析：只覆盖本包 5 个 SKILL.md 的写法
+ * 极简 frontmatter 解析：只覆盖本包 6 个 SKILL.md 的写法
  * （`name` / `description`（含 `>` 折叠块）/ 可选两个布尔键），不引入 yaml 依赖，
  * 页内其它 YAML 一概不解析。
  * @param raw - 文件全文
@@ -167,7 +168,7 @@ function readBoolean(
 }
 
 /**
- * 读取 5 个白名单 bundle（每个目录一个 SKILL.md）。
+ * 读取 6 个白名单 bundle（每个目录一个 SKILL.md）。
  * 单个失败只跳过该条并 warn——不抛错，保证插件其余功能不受影响。
  * @param root - 包根（测试可传夹具目录）
  * @param dirs - bundle 目录白名单（测试可缩小）
