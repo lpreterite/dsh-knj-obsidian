@@ -1,7 +1,8 @@
 // knowledge-distill.test.mjs — 「知识蒸馏」统一启动器契约（先红后绿）
 // 分段：浏览 / 图谱 / 知识蒸馏（原「代码采集」更名并入「近期会话蒸馏」）
-// 选项：枚举/常量字典、表结构、全部（字典+表结构）、近期会话蒸馏（近 3/7/30 天）
-// 指令分别引用内置 wiki-collect / wiki-distill skill；预填当前对话 + 复制兜底；不直接写库。
+// 选项：枚举/常量字典、表结构、文档蒸馏（wiki-docs，用户圈定路径）、系统功能挖掘（预留）、
+//       会话蒸馏（近 3/7/30 天 / 指定会话）
+// 指令分别引用内置 wiki-collect / wiki-docs / wiki-distill skill；预填新会话 + 复制兜底；不直接写库。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -12,30 +13,36 @@ const launcher = readFileSync(join(CLIENT, 'KnowledgeDistillLauncher.tsx'), 'utf
 const sidebar = readFileSync(join(CLIENT, 'WikiSidebar.tsx'), 'utf8')
 const lintPanel = readFileSync(join(CLIENT, 'LintPanel.tsx'), 'utf8')
 
-test('单一写入授权规则：启动器与两个 skill 表述一致（无阻塞式二次确认）', () => {
+test('单一写入授权规则：启动器与三个 skill 表述一致（无阻塞式二次确认）', () => {
   const collect = readFileSync(join(import.meta.dirname, 'wiki-collect', 'SKILL.md'), 'utf8')
   const distill = readFileSync(join(import.meta.dirname, 'wiki-distill', 'SKILL.md'), 'utf8')
+  const docs = readFileSync(join(import.meta.dirname, 'wiki-docs', 'SKILL.md'), 'utf8')
 
-  // 三方都必须要求还原点
+  // 四方都必须要求还原点
   assert.match(launcher, /wiki_checkpoint/, '启动器指令必须要求还原点')
   assert.match(collect, /wiki_checkpoint/, 'wiki-collect 必须要求还原点')
   assert.match(distill, /wiki_checkpoint/, 'wiki-distill 必须要求还原点')
-  // 三方都必须有写前清单，且都不是阻塞式确认
+  assert.match(docs, /wiki_checkpoint/, 'wiki-docs 必须要求还原点')
+  // 四方都必须有写前清单，且都不是阻塞式确认
   assert.match(launcher, /写前清单/)
   assert.match(collect, /写前清单/)
   assert.match(distill, /写前清单/)
+  assert.match(docs, /写前清单/)
   assert.match(launcher, /不做阻塞式二次确认|列完即继续/)
   assert.match(collect, /不等待确认回复|不做阻塞式二次确认/)
   assert.match(distill, /列完即继续|不做阻塞式二次确认/)
+  assert.match(docs, /不等待确认回复|不做阻塞式二次确认/)
   // 不得再出现互相矛盾的“等确认”措辞
   assert.doesNotMatch(launcher, /等(我|用户)确认/, '启动器不得要求阻塞式确认')
   assert.doesNotMatch(collect, /等(用户)?确认/, 'wiki-collect 不得要求阻塞式确认')
   assert.doesNotMatch(distill, /等(用户)?确认/, 'wiki-distill 不得要求阻塞式确认')
+  assert.doesNotMatch(docs, /等(用户)?确认/, 'wiki-docs 不得要求阻塞式确认')
 })
 
-test('知识蒸馏启动器提供各选项并分别引用两个内置 skill', () => {
+test('知识蒸馏启动器提供各选项并分别引用三个内置 skill', () => {
   assert.match(launcher, /枚举\/常量字典/)
   assert.match(launcher, /表结构/)
+  assert.match(launcher, /文档蒸馏/, '应有「文档蒸馏」选项（wiki-docs 通道）')
   assert.match(launcher, /系统功能挖掘/)
   assert.doesNotMatch(launcher, /全部（字典 \+ 表结构）/, '原“全部”选项已改名为系统功能挖掘')
   // 「近期会话蒸馏」与「指定会话蒸馏」已合并为单一入口「会话蒸馏」：由"有没有勾选会话"
@@ -43,6 +50,7 @@ test('知识蒸馏启动器提供各选项并分别引用两个内置 skill', ()
   assert.match(launcher, /会话蒸馏/)
   assert.doesNotMatch(launcher, /'session-pick'/, '合并后不应再保留第二个并列的会话蒸馏模式')
   assert.match(launcher, /wiki-collect/)
+  assert.match(launcher, /wiki-docs/)
   assert.match(launcher, /wiki-distill/)
 })
 
@@ -55,6 +63,9 @@ test('批次纪律：还原点 + 查重 + 写前清单 + 质量评估报告', ()
   // 幂等：逐会话哈希，禁止 catalog 整体哈希/日期区间 source
   assert.match(launcher, /该会话自己的摘要内容哈希|逐会话/, 'contentHash 必须逐会话')
   assert.doesNotMatch(launcher, /catalog\.json 文件的 SHA-256/, '不得使用 catalog 整体哈希')
+  // 文档蒸馏的幂等键：source=file:<相对路径> + 源文件字节 SHA-256
+  assert.match(launcher, /file:<相对路径>/, '文档蒸馏 source 应为 file:<相对路径>')
+  assert.match(launcher, /SHA-256/, '文档蒸馏 contentHash 应为源文件字节 SHA-256')
   // 工作区硬约束：插件算好 project-filter 与 sessions 根
   assert.match(launcher, /projectFilterOf/, '应插件计算项目过滤')
   assert.match(launcher, /--D-workspace-|replace\(\/\[:\\\\\/\]/, '项目过滤应为路径转义形态')
@@ -109,6 +120,20 @@ test('启动器如实披露代码侧支持范围并保留新建会话/复制双�
   assert.doesNotMatch(launcher, /填入当前对话输入框/, '不再填充当前会话窗口')
   assert.match(launcher, /复制触发指令/)
   assert.doesNotMatch(launcher, /已调用\s*AI|自动\s*写入/)
+})
+
+test('文档蒸馏：对象必须由用户圈定（空路径拒绝发指令 + 边界披露）', () => {
+  // 空路径时 deliver 应直接返回并提示，不生成指令（防止 agent 擅自全库扫描）
+  assert.match(launcher, /docsPath/, '应有文档路径输入状态')
+  assert.match(launcher, /必须由你圈定/, '空路径应拒绝并说明原因')
+  assert.match(launcher, /buildDocsTrigger/, '应有独立的文档蒸馏指令构造器')
+  // 诚实披露：文本支持 / 二进制不支持 / 源文件只读
+  assert.match(launcher, /文本可读/, '应披露只处理文本可读内容')
+  assert.match(launcher, /pdf\/图片\/office/, '应披露二进制格式不支持')
+  assert.match(launcher, /源文件只读/, '应披露源文件只读')
+  // 防跑飞：指令里限定"不得擅自扩大范围"，且排除非文档源
+  assert.match(launcher, /不得擅自扩大/, '指令应锁定用户圈定的范围')
+  assert.match(launcher, /node_modules/, '指令应排除依赖目录')
 })
 
 test('桥接：新建会话契约（create → open → scope → setDraft）', () => {

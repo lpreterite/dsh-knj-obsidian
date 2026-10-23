@@ -19,7 +19,7 @@ import { apply } from './lib/index.js'
 // join 后产生 \\D:\…，fs 会解析成不存在的 D:\D:\…
 const ROOT = fileURLToPath(new URL('.', import.meta.url))
 const FIX = join(ROOT, 'test-fixtures', 'skill-bundles')
-const EXPECTED = ['wiki-collect', 'wiki-distill', 'wiki-init', 'wiki-mine', 'wiki-query']
+const EXPECTED = ['wiki-collect', 'wiki-distill', 'wiki-docs', 'wiki-init', 'wiki-mine', 'wiki-query']
 
 /** 收集 warn 而不打印。 */
 function collector() {
@@ -27,7 +27,7 @@ function collector() {
   return { messages, warn: (message) => messages.push(message) }
 }
 
-test('包根下 5 个 bundle 全部可读，名字与 rank 正确', () => {
+test('包根下 6 个 bundle 全部可读，名字与 rank 正确', () => {
   const { warn } = collector()
   const bundles = readSkillBundles(ROOT, SKILL_BUNDLE_DIRS, warn)
   assert.deepEqual(bundles.map((b) => b.name), EXPECTED)
@@ -54,7 +54,7 @@ test('provider 候选带 provider/source/rank/resourceBase，get 返回正文', 
   const provider = createSkillProvider(ROOT, collector().warn)
   assert.equal(provider.name, SKILL_PROVIDER_NAME)
   const candidates = await provider.list()
-  assert.equal(candidates.length, 5)
+  assert.equal(candidates.length, 6)
   for (const candidate of candidates) {
     assert.equal(candidate.provider, SKILL_PROVIDER_NAME)
     assert.equal(candidate.source, 'bundled')
@@ -69,6 +69,21 @@ test('provider 候选带 provider/source/rank/resourceBase，get 返回正文', 
   assert.match(String(collect.content), /category=dictionaries/)
   assert.doesNotMatch(String(collect.content), /^---/m, 'content 不应带 frontmatter')
   assert.equal(await provider.get({ name: 'no-such-skill' }), undefined)
+})
+
+test('wiki-docs 的 resourceBase 指向包内该目录，蒸馏纪律与幂等键齐备', async () => {
+  const provider = createSkillProvider(ROOT, collector().warn)
+  const docs = await provider.get({ name: 'wiki-docs' })
+  assert.ok(docs, 'get 应返回 wiki-docs')
+  assert.equal(String(docs.resourceBase.path), join(ROOT, 'wiki-docs'))
+  assert.equal(docs.rank, BUNDLED_SKILL_RANK)
+  // 纪律三件套与代码侧同源：还原点 / 写前清单 / 非阻塞
+  assert.match(String(docs.content), /wiki_checkpoint/)
+  assert.match(String(docs.content), /写前清单/)
+  assert.match(String(docs.content), /不等待确认回复|不做阻塞式二次确认/)
+  // 幂等键：source 与 contentHash 的口径必须写死（文件字节 SHA-256）
+  assert.match(String(docs.content), /source = `file:</)
+  assert.match(String(docs.content), /SHA-256/)
 })
 
 test('wiki-distill 的 resourceBase 指向包内该目录，随附提取器在同目录', async () => {
@@ -102,7 +117,7 @@ test('parseFrontmatter：无 frontmatter 返回 undefined，折叠块合成单�
   assert.equal(parsed.body, '正文')
 })
 
-test('mountSkillProvider：注入 skills 并注册可列出 5 个 skill 的 provider', async () => {
+test('mountSkillProvider：注入 skills 并注册可列出 6 个 skill 的 provider', async () => {
   const injected = []
   let registered
   let registrationDisposed = 0
