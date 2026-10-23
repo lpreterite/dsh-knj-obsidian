@@ -575,6 +575,12 @@ v16 开始把 18 个 `KNJ_OBSIDIAN_*` 环境变量迁入 DSH 设置页（issue #
   miss-log.ts 的 8 个开关函数原签名改为委托 settings 裁决器，导出面零变化；
   `GATE` / `WRITE_GATE` 枚举保持原语义（env 非空即完全接管，仅 warn|block / ask|block 有效）。
   **至此 18 个环境变量全部可在设置页配置，issue #2 收口**
+- **部署前提（2026-10-23 实机踩坑）**：设置页出现本条目的**必要条件**是 profile 的
+  `cordis.patch.yml` 里有 `- id: dsh-knj-obsidian` + `name:` 条目。bundle 自带的 cordis.patch.yml
+  会让插件被**自动挂载**（tools/routes/skills 正常），但设置行按 `configEditor.configuration()`
+  （即 profile patch 文档）生成——文档里没有这个 entry，`SettingsForms.describe()` 就不产出行，
+  设置页无此节、`/api/obsidian-wiki/config` GET 也 404（'entry not active'）。修复 = 往 profile
+  patch 补两行条目后重启
 
 ## 路线
 
