@@ -18,7 +18,7 @@ dsh plugin --profile web add ./dsh-knj-obsidian-2026.9.301.tgz
 # 3. 重启 DSH，确认宿主日志无 dsh-knj-obsidian 相关报错
 ```
 
-安装后插件在 DSH 启动时自动向 agent 暴露工具（`wiki_ingest` / `wiki_capture` / `wiki_normalize_tags` / `wiki_lint` / `wiki_query` / `wiki_drill` / `wiki_read` / `wiki_export` / `wiki_mine` / `wiki_init` / `wiki_checkpoint` / `wiki_checkpoints` / `wiki_search_semantic`），并随包分发 5 个 `wiki-*` skill，无需额外配置。
+安装后插件在 DSH 启动时自动向 agent 暴露工具（`wiki_ingest` / `wiki_capture` / `wiki_normalize_tags` / `wiki_lint` / `wiki_query` / `wiki_drill` / `wiki_read` / `wiki_export` / `wiki_mine` / `wiki_init` / `wiki_checkpoint` / `wiki_checkpoints` / `wiki_search_semantic`），并随包分发 6 个 `wiki-*` skill，无需额外配置。
 
 ### 兼容的 DSH 版本
 
@@ -338,7 +338,7 @@ v9 把「本地工程代码 → 知识页」做成 **agent 会话驱动**的采�
   枚举/常量（→ dictionaries）与 SQL DDL/MyBatis/JPA 表结构（→ tables）并对账存量知识
   （new/changed/unchanged/deleted + 同名近似页提醒），蒸馏后经 `wiki_ingest` 直接入库
   （contentHash 增量跳过、未知/推断保持 unknown/inferred、不覆盖他源页面、不读会话归档）
-- **skill 注册（v2026.9.220 起）**：包内 5 个 skill（`wiki-collect` / `wiki-mine` / `wiki-distill` /
+- **skill 注册（v2026.9.220 起）**：包内 skill（`wiki-collect` / `wiki-docs` / `wiki-mine` / `wiki-distill` /
   `wiki-init` / `wiki-query`）经插件内的 skill provider 注册进宿主 skill registry
   （`src/skill-provider.ts`，rank = `BUNDLED_SKILL_RANK` 600）。600 低于项目根(100)与用户根
   （`~/.dsh/skills`，400），因此**本地/项目里的同名副本优先，包内版本做兜底**且随插件升级自动更新。
@@ -495,6 +495,24 @@ v12 按对抗审查结论给「知识蒸馏」补上可回滚与可评估能力�
 > 实现位置：`src/trigger.ts`（四层 + 写入闸 + 纯函数判据）、`src/vault-manager.ts`（`readonlyVaultForRoot` / `nearestVaultRoot`，只读解析带边界）、`src/semantic-hits.ts`（按库共享语义运行时的取用，工具与触发层复用同一份缓存）。
 
 > 已知缺口（下一版）：`wiki_*` **工具**仍读全局当前库——只有触发层做了会话级绑定。工具侧要按会话解析需要把 agent/session 传进工具执行上下文，属独立改动。
+
+## v14：文档蒸馏（wiki-docs skill + 启动器选项）
+
+v14 把「提炼项目中的文件内容」补成正规通道。此前采集侧只有两条：wiki-collect 挖代码结构（Java 枚举/表结构）、
+wiki-distill 蒸历史会话——设计文档、README、会议纪要、配置说明这类**文档内容**两头够不着
+（mine 不认、`/import` 只收 .md）。写入内核 `wiki_ingest` 本来就是源无关的，缺的只是一条带纪律的前端：
+
+- **内置 `wiki-docs` skill**（`wiki-docs/SKILL.md`，随包分发，skill provider 白名单 + `package.json files` 同步收录）：
+  与 wiki-collect 同一套批次纪律（还原点 → `wiki_query` 查重 → 写前清单（信息性预览，不阻塞）→
+  `wiki_ingest` → 质量评估报告），差别只在"扫描"一步换成 agent 用 glob/read 通读用户圈定的文档
+  - 幂等键：source = `file:<相对路径>`、contentHash = **源文件字节 SHA-256**——文件未变重跑自动跳过
+  - 分类：单文档结论页 `references`，跨文档综合页 `synthesis`；矛盾与跨文档归纳标 `inferred`
+  - 诚实披露：只处理文本可读内容（Markdown/txt/rst/adoc/源码注释）；pdf/图片/office 等二进制
+    **不支持、不做解析**，逐个列入报告「不支持」
+- **GUI 启动器「文档蒸馏」选项**（`KnowledgeDistillLauncher.tsx`）：选中后填写路径或通配
+  （如 `docs/`、`README.md`）；**留空不生成指令**——蒸馏对象必须由用户圈定，防止 agent 擅自全库扫描
+  （与「写入必须用户点头」同一性格：自动化最多到"圈定范围后开工"，绝不自行扩大）
+- **skill provider 白名单扩到 6 个**：`SKILL_BUNDLE_DIRS` 增加 `wiki-docs`（测试 `EXPECTED` 同步）
 
 ## 路线
 
