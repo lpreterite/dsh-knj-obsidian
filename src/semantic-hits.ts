@@ -11,9 +11,10 @@
 // 只读：检索路径不建 collection、不触发索引、不下载模型。
 import { basename } from 'node:path'
 import {
-  createSemanticRuntime, clampLimit, runOfflineSearch,
+  clampLimit, runOfflineSearch,
   type SemanticHit, type SemanticRuntime,
 } from './semantic-index.ts'
+import { semanticRuntimeFactoryFor } from './semantic-remote.ts'
 import type { SemanticPageHit } from './retriever.ts'
 import type { WikiCategory } from './types.ts'
 
@@ -26,11 +27,11 @@ export function semanticFallbackEnabled(): boolean {
   return (process.env.KNJ_OBSIDIAN_SEMANTIC_FALLBACK ?? '').trim().toLowerCase() !== 'off'
 }
 
-/** 创建语义运行时的可注入点（测试替换；默认真实实现，会读 ~/.dsh/qmd 与本地模型）。 */
-export type SemanticRuntimeFactory = (root: string) => Promise<SemanticRuntime>
+/** 创建语义运行时的可注入点（测试替换；默认按 KNJ_OBSIDIAN_EMBED 分派 local/remote/off）。 */
+export type SemanticRuntimeFactory = (root: string) => Promise<SemanticRuntime | null>
 
 export const defaultSemanticRuntimeFactory: SemanticRuntimeFactory =
-  (root) => createSemanticRuntime({ vaultRoot: root })
+  (root) => semanticRuntimeFactoryFor()(root)
 
 /** 按库根缓存的语义运行时（进程级；模型只加载一次）。 */
 const semanticRuntimes = new Map<string, Promise<SemanticRuntime | null>>()

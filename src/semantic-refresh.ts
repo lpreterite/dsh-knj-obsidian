@@ -8,18 +8,21 @@
 // 4) 不抛异常：任何失败都变成结果里的 note，交给 UI/agent 如实展示。
 import { join } from 'node:path'
 import {
-  classifyStatus, createSemanticRuntime, notReadyMessage, pendingEmbeddingCount, resolveStateHome,
+  classifyStatus, notReadyMessage, pendingEmbeddingCount, resolveStateHome,
   DEFAULT_MODEL_FILENAME,
   type SemanticState,
   type SemanticStatusRaw,
   type SemanticStore,
 } from './semantic-index.ts'
+import { semanticRuntimeFactoryFor } from './semantic-remote.ts'
 
 export interface SemanticRuntimeView {
   status: SemanticState
   modelPath: string
   modelPresent: boolean
   store: SemanticStore | null
+  /** 后端标识（remote-embed / qmd-offline；缺省 = 本地）。 */
+  backendName?: string
 }
 
 export interface RefreshRunResult {
@@ -55,8 +58,8 @@ export interface RefresherOptions {
   debounceMs?: number
   /** 自动刷新上限：待嵌入超过它就不自动跑，只回报（避免一次大批入库偷偷占满 CPU 很久）。 */
   maxAutoDocs?: number
-  /** 测试注入点：替换真实运行时创建。 */
-  runtimeFactory?: (opts: { vaultRoot: string; home?: string }) => Promise<SemanticRuntimeView>
+  /** 测试注入点：替换真实运行时创建（返回 null = 后端未启用）。 */
+  runtimeFactory?: (opts: { vaultRoot: string; home?: string }) => Promise<SemanticRuntimeView | null>
   now?: () => number
 }
 
@@ -91,7 +94,7 @@ export function createRefresher(opts: RefresherOptions): Refresher {
   const debounceMs = opts.debounceMs ?? DEFAULT_DEBOUNCE_MS
   const maxAutoDocs = opts.maxAutoDocs ?? DEFAULT_MAX_AUTO_DOCS
   const runtimeFactory = opts.runtimeFactory
-    ?? ((o: { vaultRoot: string; home?: string }) => createSemanticRuntime(o))
+    ?? semanticRuntimeFactoryFor()
 
   let timer: ReturnType<typeof setTimeout> | null = null
   let running: Promise<RefreshRunResult> | null = null
@@ -106,7 +109,19 @@ export function createRefresher(opts: RefresherOptions): Refresher {
     const at = new Date().toISOString()
     const runtime = await runtimeFactory({ vaultRoot: opts.vaultRoot, home: opts.home })
     const paths = resolveStateHome(opts.home)
+    if (!runtime) {
+      return {
+        ok: false, at, documents: 0, chunks: 0, durationMs: now() - startedMs,
+        note: '语义后端未启用：KNJ_OBSIDIAN_EMBED=off，或 =remote 但未配置 KNJ_OBSIDIAN_EMBED_URL。',
+      }
+    }
     if (!runtime.modelPresent) {
+      if (runtime.backendName === 'remote-embed') {
+        return {
+          ok: false, at, documents: 0, chunks: 0, durationMs: now() - startedMs,
+          note: `远程嵌入服务探活失败（${runtime.modelPath}）：请检查服务是否在线、URL/KEY 是否正确。`,
+        }
+      }
       return {
         ok: false, at, documents: 0, chunks: 0, durationMs: now() - startedMs,
         note: notReadyMessage('model-missing', paths.modelsDir, DEFAULT_MODEL_FILENAME),
@@ -204,7 +219,13 @@ export function createRefresher(opts: RefresherOptions): Refresher {
     } catch (error) {
       return { ...base, note: `语义状态读取失败：${error instanceof Error ? error.message : String(error)}` }
     }
+    if (!runtime) {
+      return { ...base, modelPresent: false, note: '语义后端未启用：KNJ_OBSIDIAN_EMBED=off，或 =remote 但未配置 KNJ_OBSIDIAN_EMBED_URL。' }
+    }
     if (!runtime.modelPresent) {
+      if (runtime.backendName === 'remote-embed') {
+        return { ...base, modelPresent: false, note: `远程嵌入服务探活失败（${runtime.modelPath}）` }
+      }
       return { ...base, modelPresent: false, note: notReadyMessage('model-missing', resolveStateHome(opts.home).modelsDir, DEFAULT_MODEL_FILENAME) }
     }
     if (!runtime.store) {

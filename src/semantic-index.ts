@@ -330,6 +330,8 @@ export interface SemanticRuntime {
   store: SemanticStore | null
   /** 索引计数（供工具如实回报「有几篇还没嵌入」；模型缺失时为 0）。 */
   index: { documents: number; pendingEmbedding: number; hasVectorIndex: boolean }
+  /** 后端标识（drill 语义通道的 name 用；缺省 = 本地 qmd-offline）。 */
+  backendName?: string
 }
 
 export interface CreateRuntimeOptions {

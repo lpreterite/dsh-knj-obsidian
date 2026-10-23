@@ -18,9 +18,10 @@ import { relatedHits } from './related-check.ts'
 import { createCheckpoint, listCheckpoints } from './checkpoint.ts'
 import { rebuildIndex } from './index-builder.ts'
 import {
-  createSemanticRuntime, runOfflineSearch, notReadyMessage, resolveStateHome, DEFAULT_MODEL_FILENAME,
+  runOfflineSearch, notReadyMessage, resolveStateHome, DEFAULT_MODEL_FILENAME,
   type SemanticHit, type SemanticRuntime,
 } from './semantic-index.ts'
+import { selectSemanticRuntime, semanticRuntimeFactoryFor } from './semantic-remote.ts'
 import {
   semanticFallbackEnabled, semanticRuntimeFor, disposeSemanticRuntimes, workspaceNameOf,
   clampLimit, semanticRawHits, type SemanticRuntimeFactory,
@@ -178,7 +179,7 @@ function toSemanticPageHits(results: readonly SemanticHit[]): SemanticPageHit[] 
 
 export function mountTools(ctx: Context, provider: VaultProvider, opts: MountToolsOptions = {}): () => void {
   const runtimeFactory: SemanticRuntimeFactory =
-    opts.semanticRuntimeFactory ?? ((root: string) => createSemanticRuntime({ vaultRoot: root }))
+    opts.semanticRuntimeFactory ?? semanticRuntimeFactoryFor()
 
   /**
    * 零候选时记一条未命中（诊断用）。**绝不影响检索结果**：只读、失败静默、开关可关。
@@ -1108,7 +1109,7 @@ export function mountTools(ctx: Context, provider: VaultProvider, opts: MountToo
 
   ctx.tools.register(defineTool({
     name: 'wiki_search_semantic',
-    description: '对知识库做【本地语义检索】（进程内集成 QMD 库 + 本地 300M 嵌入模型，不需要单独安装/启动 QMD，也不需要 QMD 插件）。只启用两条离线通道——本地嵌入向量 + BM25 关键词，并在本地 RRF 融合；云端查询扩展/精排模型被显式禁用，任何情况下都不联网下载。返回有界结果（默认 8 条、上限 20）含页面 id/分类/标题/片段/相关度（融合分数，非概率）。模型缺失、索引为空或陈旧时会如实说明并指向更新动作；纯关键词检索请继续用 wiki_query（本工具不假装关键词结果=语义结果）。',
+    description: '对知识库做【语义检索】。嵌入后端可选：KNJ_OBSIDIAN_EMBED=local（默认，进程内 QMD + 本地 GGUF 模型，零联网）或 =remote（调 OpenAI 兼容 POST {url}/embeddings，如 axonhub；本机不加载任何模型/原生栈）。local 模式只启用两条离线通道——本地嵌入向量 + BM25 关键词，本地 RRF 融合，云端查询扩展/精排被显式禁用。返回有界结果（默认 8 条、上限 20）含页面 id/分类/标题/片段/相关度（融合分数，非概率）。后端未启用/服务探活失败/索引为空或陈旧时如实说明并指向更新动作；纯关键词检索请继续用 wiki_query（本工具不假装关键词结果=语义结果）。',
     parameters: {
       query: { type: 'string', required: true, description: '自然语言问题或关键词' },
       limit: { type: 'number', description: '返回条数（默认 8，硬上限 20）' },
@@ -1149,10 +1150,25 @@ export function mountTools(ctx: Context, provider: VaultProvider, opts: MountToo
       const limit = clampLimit(args.limit)
       const store = currentReadonlyStore(provider)
       const vaultRoot = provider.currentRecord()?.root ?? join(store.wikiRoot, '..')
-      const runtime = await createSemanticRuntime({ vaultRoot })
+      // 后端按 KNJ_OBSIDIAN_EMBED 分派：local（qmd 本地，默认）/ remote（OpenAI 兼容接口）/ off
+      const runtime = await selectSemanticRuntime({ vaultRoot })
+      // 显式关闭（off）或 remote 未配 URL：如实回报，而不是伪装成模型缺失
+      if (!runtime) {
+        return {
+          status: 'library-missing' as const, limit, count: 0, results: [],
+          message: '语义后端未启用：KNJ_OBSIDIAN_EMBED=off，或 =remote 但未配置 KNJ_OBSIDIAN_EMBED_URL。'
+            + '词面检索（wiki_query）不受影响。',
+        }
+      }
 
       // 严格离线：模型缺失时只给可执行信息，不联网、不报错
       if (!runtime.modelPresent) {
+        if (runtime.backendName === 'remote-embed') {
+          return {
+            status: 'model-missing' as const, limit, count: 0, results: [],
+            message: `远程嵌入服务探活失败（${runtime.modelPath}）：请检查服务是否在线、URL/KEY 是否正确。`,
+          }
+        }
         const paths = resolveStateHome()
         return {
           status: 'model-missing' as const, limit, count: 0, results: [],
@@ -1223,7 +1239,7 @@ export function mountTools(ctx: Context, provider: VaultProvider, opts: MountToo
     if (!runtime.store) return { backend: null, status: 'library-missing', holder }
     const qmd = runtime.store
     const backend: DrillSemanticBackend = {
-      name: 'qmd-offline',
+      name: runtime.backendName ?? 'qmd-offline',
       async search(query, searchOpts) {
         // 严格离线：只用本地向量 + BM25 两通道并在本地融合，绝不调 store.search()（会拉起云端模型）
         const outcome = await runOfflineSearch(qmd, query, searchOpts?.limit ?? 5)
