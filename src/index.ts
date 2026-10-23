@@ -10,7 +10,7 @@ import { mountTools } from './tools.ts'
 import { mountWikiRoutes, type WikiHost } from './routes.ts'
 import { installTrigger, type TriggerHost } from './trigger.ts'
 import { mountSkillProvider } from './skill-provider.ts'
-import { KnjConfigSchema, resolveKnjConfig, setResolvedConfig, mountSettingsHttp, type KnjConfig } from './settings.ts'
+import { KnjConfigSchema, resolveKnjConfig, setResolvedConfig, setSettingsService, type KnjConfig, type SettingsServiceFace } from './settings.ts'
 import { disposeSemanticRuntimes } from './semantic-hits.ts'
 
 export const name = 'dsh-knj-obsidian'
@@ -86,14 +86,14 @@ export function apply(ctx: Context, rawConfig?: unknown): void {
       disposeTrigger()
       disposeSkills()
       setResolvedConfig(undefined)
+      setSettingsService(undefined)
     }
   })
-  // 设置 HTTP 通道：**独立 inject 片段**，且 'settings' 必须显式声明——
-  // p7 实机踩坑：动态回调里对未声明服务的防御式读取（host.settings / host.get('settings')）
-  // 拿不到 cordis 0.2.0 的 settings 服务（未声明即不可见），路由静默不注册 →
-  // /api/obsidian-wiki/config 404。声明式注入后与 dsh-self-improved 同构。
-  // 该 fragment 若失败（极端裁剪宿主无 settings）只损失 HTTP 通道，不牵连 tools/routes/skills。
-  ctx.inject(['settings', 'webServer'], (svcCtx: Context) => {
-    mountSettingsHttp(ctx, svcCtx)
+  // settings 服务捕获片段：'settings' 必须显式声明才可见（p7/p8 实机：未声明的防御式读取
+  // 拿不到它；而声明式片段解析出的 webServer 又是另一个实例，路由注册上去=静默 404）。
+  // 所以两个服务各回各的片段：路由走 tools 片段，服务由这里捕获后经共享位交给 handler。
+  // 本片段失败只损失 HTTP 通道，不牵连 tools/routes/skills。
+  ctx.inject(['settings'], (svcCtx: Context) => {
+    setSettingsService((svcCtx as unknown as { settings?: SettingsServiceFace }).settings)
   })
 }

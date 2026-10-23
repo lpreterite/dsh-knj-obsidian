@@ -8,7 +8,7 @@ import {
   effectiveEmbedConfig, semanticFallbackOff, drillOff, autoRefreshOff,
   triggerOff, triggerFulltextOff, vaultIdentityOff, triggerRecurrenceOff, triggerSubagentOff, missLogOff,
   gateModeOf, writeGateModeOf,
-  resolveKnjConfig, setResolvedConfig, mountSettingsHttp,
+  resolveKnjConfig, setResolvedConfig, setSettingsService, handleConfigRequest,
 } from './lib/settings.js'
 
 /** 面板语义组夹具（其余字段给默认值）。 */
@@ -175,52 +175,49 @@ const mockReq = (method, body) => ({
   async *[Symbol.asyncIterator]() { if (body !== undefined) yield body },
 })
 
-test('mountSettingsHttp：GET 描述符（embedKey 置空）+ POST 变更（400/409/200）+ settings 缺席不注册', async () => {
-  const routes = []
-  const webServer = { register: (route) => { routes.push(route); return () => {} } }
+test('handleConfigRequest：GET 描述符（embedKey 置空）+ POST 变更（400/409/200）+ 服务缺席 503 + 栅栏 403', async () => {
   const rows = [{ ns: 'dsh-knj-obsidian', revision: 3, value: { semantic: { embedKey: 'secret', embed: 'local' } }, base: {}, user: {} }]
   const settings = mockSettingsService(rows)
 
-  // settings 缺席：不注册路由，返回 no-op disposer
-  const empty = mountSettingsHttp({}, { webServer })
-  assert.equal(routes.length, 0)
-  empty()
+  // 服务缺席 → 503（路由已在 routes.ts prefix handler 里，处理器只对服务负责）
+  const res0 = mockRes()
+  await handleConfigRequest(mockReq('GET'), res0)
+  assert.equal(res0.status, 503)
 
-  const dispose = mountSettingsHttp({}, { webServer, settings, get: () => undefined })
-  assert.equal(routes.length, 1)
-  const handler = routes[0].handler
+  setSettingsService(settings)
+  try {
+    // GET：embedKey 置空
+    const res1 = mockRes()
+    await handleConfigRequest(mockReq('GET'), res1)
+    assert.equal(res1.status, 200)
+    const body1 = JSON.parse(res1.body)
+    assert.equal(body1.ok, true)
+    assert.equal(body1.descriptor.value.semantic.embedKey, '')
+    assert.equal(body1.descriptor.revision, 3)
 
-  // GET：loopback 放行，embedKey 置空
-  const res1 = mockRes()
-  await handler(mockReq('GET'), res1)
-  assert.equal(res1.status, 200)
-  const body1 = JSON.parse(res1.body)
-  assert.equal(body1.ok, true)
-  assert.equal(body1.descriptor.value.semantic.embedKey, '')
-  assert.equal(body1.descriptor.revision, 3)
+    // POST：ops 非数组 → 400
+    const res2 = mockRes()
+    await handleConfigRequest(mockReq('POST', '{"ops":{}}'), res2)
+    assert.equal(res2.status, 400)
 
-  // POST：ops 非数组 → 400
-  const res2 = mockRes()
-  await handler(mockReq('POST', '{"ops":{}}'), res2)
-  assert.equal(res2.status, 400)
+    // POST：revision 冲突 → 409（mock 在 expectedRevision=7 时抛 SettingsConflictError）
+    const res3 = mockRes()
+    await handleConfigRequest(mockReq('POST', '{"ops":[{"path":"semantic.embed","value":"remote"}],"expectedRevision":7}'), res3)
+    assert.equal(res3.status, 409)
+    assert.equal(JSON.parse(res3.body).code, 'conflict')
 
-  // POST：revision 冲突 → 409（mock 在 expectedRevision=7 时抛 SettingsConflictError）
-  const res3 = mockRes()
-  await handler(mockReq('POST', '{"ops":[{"path":"semantic.embed","value":"remote"}],"expectedRevision":7}'), res3)
-  assert.equal(res3.status, 409)
-  assert.equal(JSON.parse(res3.body).code, 'conflict')
+    // POST：成功 → 200 且 revision 前进
+    const res4 = mockRes()
+    await handleConfigRequest(mockReq('POST', '{"ops":[{"path":"semantic.embed","value":"remote"}],"expectedRevision":3}'), res4)
+    assert.equal(res4.status, 200)
+    assert.equal(JSON.parse(res4.body).descriptor.revision, 4)
 
-  // POST：成功 → 200 且 revision 前进
-  const res4 = mockRes()
-  await handler(mockReq('POST', '{"ops":[{"path":"semantic.embed","value":"remote"}],"expectedRevision":3}'), res4)
-  assert.equal(res4.status, 200)
-  assert.equal(JSON.parse(res4.body).descriptor.revision, 4)
-
-  // 非 loopback 且未配对 → 403
-  const res6 = mockRes()
-  const foreignReq = { method: 'GET', socket: { remoteAddress: '100.64.0.8' }, setEncoding() {} }
-  await handler(foreignReq, res6)
-  assert.equal(res6.status, 403)
-
-  dispose()
+    // 非 loopback 且未配对 → 403
+    const res6 = mockRes()
+    const foreignReq = { method: 'GET', socket: { remoteAddress: '100.64.0.8' }, setEncoding() {} }
+    await handleConfigRequest(foreignReq, res6)
+    assert.equal(res6.status, 403)
+  } finally {
+    setSettingsService(undefined)
+  }
 })

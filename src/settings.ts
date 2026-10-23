@@ -289,6 +289,29 @@ export function writeGateModeOf(env: Record<string, string | undefined> = proces
 
 const SETTINGS_NS = 'dsh-knj-obsidian'
 
+/** settings 服务的最小面（describe/mutate）。 */
+export interface SettingsServiceFace {
+  describe?: () => Array<Record<string, unknown>>
+  mutate?: (ns: string, ops: unknown, revision?: number) => Promise<unknown>
+}
+
+/**
+ * settings 服务共享位：由声明式 inject 片段（['settings','webServer']）捕获写入，
+ * HTTP 路由的 handler 惰性读取。为什么绕这一道：webServer 注册必须走**已验证的实例**
+ * （tools/webServer 片段的注册被实机验证可达），而 settings 服务只在声明了它的片段里可见——
+ * 两个服务天然住在两个片段里，用模块位拼接（p7/p8 实机踩坑：注册到错误 webServer 实例上 = 静默 404）。
+ */
+let settingsServiceRef: SettingsServiceFace | undefined
+
+/** 声明式 settings 片段在 apply 期调用；dispose/缺失时传 undefined。 */
+export function setSettingsService(service: SettingsServiceFace | undefined): void {
+  settingsServiceRef = service
+}
+
+function getSettingsService(): SettingsServiceFace | undefined {
+  return settingsServiceRef
+}
+
 const isLoopbackRequest = (req: IncomingMessage): boolean => {
   const addr = req.socket.remoteAddress ?? ''
   return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1'
@@ -316,28 +339,32 @@ function blankEmbedKey(section: unknown): void {
 }
 
 /**
- * 挂载 /api/obsidian-wiki/config（GET = 设置描述符；POST = {ops, expectedRevision} 变更）。
- * settings 服务经防御性读取获取（缺失时静默跳过——绝不影响 tools/routes，与 workspaceRegistry 同法）。
+ * /api/obsidian-wiki/config 的请求处理器（由 routes.ts 的 prefix handler 在路径分发时调用——
+ * **不能**另注册独立 exact 路由：prefix 路由会遮蔽同前缀下的子路径，实机表现为静默 404）。
+ * GET = 设置描述符（embedKey 置空）；POST = {ops, expectedRevision} 变更（409 冲突映射）。
+ * settings 服务经声明式片段捕获的共享位读取，未就绪返回 503。
  */
-export function mountSettingsHttp(ctx: unknown, hostCtx: unknown): () => void {
-  const host = hostCtx as {
-    webServer?: { register?: (route: Record<string, unknown>) => unknown }
-    settings?: { describe?: () => Array<Record<string, unknown>>; mutate?: (ns: string, ops: unknown, revision?: number) => Promise<unknown> }
-    get?: (name: string) => unknown
+export async function handleConfigRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const ctx = undefined
+  if (!isAllowedRequest(ctx, request)) {
+    response.writeHead(403, { 'content-type': 'application/json; charset=utf-8' })
+    response.end(JSON.stringify({ ok: false, error: 'forbidden' }))
+    return
   }
-  const settings = (host.settings
-    ?? (typeof host.get === 'function' ? host.get('settings') as typeof host.settings : undefined)) ?? undefined
-  const register = host.webServer?.register
-  if (!register || !settings?.describe || !settings.mutate) return () => {}
-
-  const writeJson = (res: ServerResponse, status: number, body: unknown): void => {
-    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
-    res.end(JSON.stringify(body))
+  const settings = getSettingsService()
+  if (!settings?.describe || !settings.mutate) {
+    response.writeHead(503, { 'content-type': 'application/json; charset=utf-8' })
+    response.end(JSON.stringify({ ok: false, error: 'settings service unavailable' }))
+    return
   }
-  const readBody = async (req: IncomingMessage): Promise<string> => {
+  const writeJson = (status: number, body: unknown): void => {
+    response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+    response.end(JSON.stringify(body))
+  }
+  const readBody = async (): Promise<string> => {
     let body = ''
-    req.setEncoding('utf8')
-    for await (const chunk of req) body += chunk
+    request.setEncoding('utf8')
+    for await (const chunk of request) body += chunk
     return body
   }
   const describeConfig = (): Record<string, unknown> | null => {
@@ -351,46 +378,24 @@ export function mountSettingsHttp(ctx: unknown, hostCtx: unknown): () => void {
     blankEmbedKey(user)
     return { ns: row.ns, revision: row.revision, value, base, user, autoGenerate: row.autoGenerate }
   }
-
-  let unregister: (() => void) | undefined
-  try {
-    // register 返回注销函数（host webServer 契约）；注册失败静默跳过，不影响 tools/routes
-    const maybe = register({
-      kind: 'exact',
-      path: '/api/obsidian-wiki/config',
-      handler: async (req: IncomingMessage, res: ServerResponse) => {
-        if (!isAllowedRequest(ctx, req)) return writeJson(res, 403, { ok: false, error: 'forbidden' })
-        if (req.method === 'GET') {
-          const descriptor = describeConfig()
-          if (!descriptor) return writeJson(res, 404, { ok: false, error: 'entry not active' })
-          return writeJson(res, 200, { ok: true, descriptor })
-        }
-        if (req.method !== 'POST') return writeJson(res, 405, { ok: false, error: 'method not allowed' })
-        try {
-          const body = JSON.parse(await readBody(req)) as { ops?: unknown; expectedRevision?: number }
-          if (!Array.isArray(body.ops)) return writeJson(res, 400, { ok: false, error: 'ops must be an array' })
-          await settings.mutate!(SETTINGS_NS, body.ops, body.expectedRevision)
-          const descriptor = describeConfig()
-          writeJson(res, 200, { ok: true, descriptor })
-        } catch (error) {
-          const name = (error as { name?: string }).name ?? ''
-          const code = (error as { code?: string }).code ?? ''
-          if (name === 'SettingsConflictError' || code === 'SETTINGS_CONFLICT') {
-            return writeJson(res, 409, { ok: false, code: 'conflict', error: String((error as Error).message ?? 'conflict') })
-          }
-          writeJson(res, 400, { ok: false, error: String(error) })
-        }
-      },
-    })
-    if (typeof maybe === 'function') unregister = maybe as () => void
-  } catch {
-    return () => {}
+  if (request.method === 'GET') {
+    const descriptor = describeConfig()
+    if (!descriptor) return writeJson(404, { ok: false, error: 'entry not active' })
+    return writeJson(200, { ok: true, descriptor })
   }
-  return () => {
-    try {
-      unregister?.()
-    } catch {
-      // 注销失败不影响其它清理
+  if (request.method !== 'POST') return writeJson(405, { ok: false, error: 'method not allowed' })
+  try {
+    const body = JSON.parse(await readBody()) as { ops?: unknown; expectedRevision?: number }
+    if (!Array.isArray(body.ops)) return writeJson(400, { ok: false, error: 'ops must be an array' })
+    await settings.mutate(SETTINGS_NS, body.ops, body.expectedRevision)
+    const descriptor = describeConfig()
+    writeJson(200, { ok: true, descriptor })
+  } catch (error) {
+    const name = (error as { name?: string }).name ?? ''
+    const code = (error as { code?: string }).code ?? ''
+    if (name === 'SettingsConflictError' || code === 'SETTINGS_CONFLICT') {
+      return writeJson(409, { ok: false, code: 'conflict', error: String((error as Error).message ?? 'conflict') })
     }
+    writeJson(400, { ok: false, error: String(error) })
   }
 }

@@ -11,6 +11,7 @@ import { rebuildIndex } from './index-builder.ts'
 import { importPath } from './importer.ts'
 import { createCheckpoint, listCheckpoints, restoreCheckpoint } from './checkpoint.ts'
 import { refresherFor, vaultRootOf, type Refresher } from './semantic-refresh.ts'
+import { handleConfigRequest } from './settings.ts'
 import type { VaultProvider } from './types.ts'
 import type { WikiCategory } from './types.ts'
 
@@ -127,6 +128,13 @@ export function mountWikiRoutes(host: WikiHost, provider: VaultProvider, deps: W
       return
     }
     try {
+      // v16 设置 HTTP 通道：必须在 store 解析前拦截（/config 与 vault 无关，且绝不能走
+      // current()/currentReadonly()——查询设置不能触发建库）。handler 由 settings.ts 提供，
+      // 含同源/配对栅栏、embedKey 置空与 409 冲突映射。
+      if (path === `${BASE}/config`) {
+        await handleConfigRequest(request, response)
+        return
+      }
       // 只有真正写页面的端点才走 current()（首次会 ensure 脚手架）；其余（GET、vault 管理、
       // 校验类 POST）一律只读视图，避免“切库/查询即建库”把未初始化库标记成已初始化。
       const WRITE_PATHS = new Set([`${BASE}/page`, `${BASE}/rebuild-index`, `${BASE}/import`, `${BASE}/checkpoint/restore`])
