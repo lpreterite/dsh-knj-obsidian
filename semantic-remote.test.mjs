@@ -137,9 +137,10 @@ test('walkVaultPages：只收七个正式分类的 .md；title/哈希/片段齐�
 
 test('RemoteVectorStore：增量嵌入（重跑零 HTTP）+ 检索排序 + 删页清理 + 状态计数', { skip: !sqliteOK }, async () => {
   const home = mkdtempSync(join(ROOT, 'home-'))
+  const vaultRoot = join(ROOT, 'vault') // 工作区根；知识页在其下的 .wiki/（与真实运行时同口径）
   const wikiRoot = makeVault()
   const { impl, calls } = mockFetch()
-  const runtime = await createRemoteSemanticRuntime({ vaultRoot: wikiRoot, home, config: CONFIG(), fetchImpl: impl, skipProbe: false })
+  const runtime = await createRemoteSemanticRuntime({ vaultRoot, home, config: CONFIG(), fetchImpl: impl, skipProbe: false })
   assert.ok(runtime, 'remote 已配置应返回运行时')
   assert.equal(runtime.backendName, 'remote-embed')
   assert.equal(runtime.modelPresent, true)
@@ -186,7 +187,7 @@ test('探活失败：modelPresent=false 如实回报，不假装可用', { skip:
   const home = mkdtempSync(join(ROOT, 'home2-'))
   const wikiRoot = makeVault()
   const { impl } = mockFetch({ modelsFail: true })
-  const runtime = await createRemoteSemanticRuntime({ vaultRoot: wikiRoot, home, config: CONFIG(), fetchImpl: impl })
+  const runtime = await createRemoteSemanticRuntime({ vaultRoot: join(ROOT, 'vault2'), home, config: CONFIG(), fetchImpl: impl })
   assert.ok(runtime)
   assert.equal(runtime.modelPresent, false)
   runtime.store.close()

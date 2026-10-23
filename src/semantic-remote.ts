@@ -331,7 +331,9 @@ export async function createRemoteSemanticRuntime(opts: {
 
   let store: RemoteVectorStore | null = null
   try {
-    store = new RemoteVectorStore({ wikiRoot: opts.vaultRoot, dbPath, client, model: config.model, batch: config.batch })
+    // 与本地 qmd 的 collection 同口径：知识页在 <vaultRoot>/.wiki 七个分类目录下
+    // （buildCollectionConfig 同构；直传 vaultRoot 会少一层、扫到 0 页——实测踩过）
+    store = new RemoteVectorStore({ wikiRoot: join(opts.vaultRoot, '.wiki'), dbPath, client, model: config.model, batch: config.batch })
   } catch (error) {
     console.warn(`[dsh-knj-obsidian] remote 语义后端初始化失败：${error instanceof Error ? error.message : String(error)}`)
     return { status: 'index-empty', modelPath: `${config.model} @ ${config.url}`, modelPresent: false, store: null, index: { documents: 0, pendingEmbedding: 0, hasVectorIndex: false }, backendName: 'remote-embed' }
