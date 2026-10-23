@@ -548,6 +548,32 @@ remote 附加配置：`KNJ_OBSIDIAN_EMBED_URL`（OpenAI 兼容根地址含 `/v1`
   remote 模式下换的是引擎不是行为
 - 换后端 = 换模型 = 维度变化 → 旧向量索引作废，需点一次「更新索引」全量重建
 
+## v16：设置面板化第一批（语义/嵌入组，env > 面板 > 默认）
+
+v16 开始把 18 个 `KNJ_OBSIDIAN_*` 环境变量迁入 DSH 设置页（issue #2，模式照搬 dsh-self-improved
+的成熟实现：zod 风格 schema 即设置页 + volatile 热应用）。**第一批迁语义/嵌入组 10 个**：
+`EMBED` / `EMBED_URL` / `EMBED_KEY` / `EMBED_MODEL` / `EMBED_DIMS` / `EMBED_BATCH` / `EMBED_TIMEOUT_MS` /
+`SEMANTIC_FALLBACK` / `DRILL` / `AUTO_REFRESH`（`src/settings.ts`，命名空间 = 条目 id `dsh-knj-obsidian`）。
+
+- **优先级铁律：env 覆盖 > 设置面板 > 内置默认**。env 仍然最高——测试注入与「排查时临时覆盖」
+  都不被面板绑架；面板值只在 env 未设时生效（`settings.ts` 的 `effectiveEmbedConfig` /
+  `semanticFallbackOff` / `drillOff` / `autoRefreshOff` 统一裁决）
+- **热更新**：semantic 组整体 `.volatile()`——设置页保存 → Loader 原地提交进运行 fiber →
+  `loader/volatile-update` → apply() 重解析 + `disposeSemanticRuntimes()` 清缓存，
+  **local↔remote↔off 热切换不用重启**。`vaultRegistryFile` 保持普通字段（改动走条目重挂载）
+- **非 loopback 编辑通道**：官方 configForms 在非回环页面被宿主置为 memory 模式（一律
+  unavailable，官方设计）。本版挂 `GET/POST /api/obsidian-wiki/config`（走宿主侧
+  SettingsForms describe/mutate，`expectedRevision` 冲突返回 409；**embedKey 永不明文回传**，
+  下发置空、留空=保持现值；访问栅栏 loopback 放行 + remote-web-ui 配对设备），让
+  Tailscale/配对访问下照常可改
+- **依赖**：新增 optional peer `@deepseek-ai/dsh-settings`（`>=0.1.5-rc.2 <0.2.1-0 ||
+  >=0.2.0-rc.1 <0.3.0` 双线收口）；宿主没有 settings 服务时 HTTP 通道静默跳过，不影响
+  tools/routes。peer 基线校验器新增 `PEER_BASELINE_OVERRIDES`（首发晚于仓库基线的包只查其
+  真实存在的宿主线）
+- **第二批（未做）**：触发/闸门组 8 个（`TRIGGER` / `TRIGGER_FULLTEXT` / `VAULT_IDENTITY` /
+  `TRIGGER_RECURRENCE` / `TRIGGER_SUBAGENT` / `GATE` / `WRITE_GATE` / `MISS_LOG`）——判据散在
+  trigger.ts 多处，需逐一换读取点，见 issue #2
+
 ## 路线
 
 - ~~**检索**~~ ✅ 已上线：`wiki_query` 工具 + `wiki-query` skill 双通道分层检索
