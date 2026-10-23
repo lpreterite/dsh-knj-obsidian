@@ -168,6 +168,9 @@ v2 检索基于同一 `.wiki/` 知识库，提供**双通道**能力，均**只�
 
 ### 本地语义检索（`wiki_search_semantic`，进程内 QMD，严格离线）
 
+> v15 起嵌入后端可选：`KNJ_OBSIDIAN_EMBED=remote` 可改为调用 OpenAI 兼容平台接口
+> （本机不加载任何模型），`off` 显式关闭。本节描述的是默认的 local 路径，详见「v15」章节。
+
 除关键词分层检索外，插件还提供**本地语义检索**工具 `wiki_search_semantic`：在 DSH 进程内直接使用 `@tobilu/qmd` 库（**不 spawn 命令、不走 MCP、无需单独安装或启动任何 QMD 插件**），只用两条不会联网的通道——本地嵌入模型向量检索 + BM25 关键词检索——并在本地做 RRF 融合。
 
 - 入参：`query`（必填）、`limit`（默认 8，硬上限 20）。
@@ -513,6 +516,37 @@ wiki-distill 蒸历史会话——设计文档、README、会议纪要、配置�
   （如 `docs/`、`README.md`）；**留空不生成指令**——蒸馏对象必须由用户圈定，防止 agent 擅自全库扫描
   （与「写入必须用户点头」同一性格：自动化最多到"圈定范围后开工"，绝不自行扩大）
 - **skill provider 白名单扩到 6 个**：`SKILL_BUNDLE_DIRS` 增加 `wiki-docs`（测试 `EXPECTED` 同步）
+
+## v15：语义嵌入后端可选（本地 GGUF / 远程平台）
+
+v15 回应一个真实事故（2026-10-23 dsh-web 段错误崩溃循环，见
+`docs/2026-10-23-dsh-web-segfault-embed-handoff.md`）：本地路径把 llama.cpp 原生 addon
+以进程内 import 加载进宿主主进程，在部分 CPU 上 embed 挂死/段错误，一崩整个宿主陪葬。
+解法是把「算向量」这一步做成**可插拔后端**：
+
+- **`KNJ_OBSIDIAN_EMBED=local`（默认）**：与历史行为完全一致——进程内 QMD + 本地 GGUF，
+  零联网。未设置任何变量时的行为与 v14 及之前相同
+- **`KNJ_OBSIDIAN_EMBED=remote`**：嵌入改为调用 **OpenAI 兼容** 的 `POST {url}/embeddings`
+  （如 axonhub / OpenAI / 各家兼容网关），向量与页面哈希存本机 sqlite（node:sqlite，
+  零新增原生依赖），相似度本地余弦 + 与词面 RRF 融合。**本机从头到尾不加载任何模型、
+  任何原生推理栈**——引爆物直接消失
+- **`KNJ_OBSIDIAN_EMBED=off`**：显式关闭语义层（词面 `wiki_query` 不受影响）
+
+remote 附加配置：`KNJ_OBSIDIAN_EMBED_URL`（OpenAI 兼容根地址含 `/v1`，必填）、
+`KNJ_OBSIDIAN_EMBED_KEY`（Bearer，可选）、`KNJ_OBSIDIAN_EMBED_MODEL`（默认 `baai/bge-m3`）、
+`KNJ_OBSIDIAN_EMBED_DIMS`（默认取首次返回长度，其后强制一致）、`KNJ_OBSIDIAN_EMBED_BATCH`（默认 16）、
+`KNJ_OBSIDIAN_EMBED_TIMEOUT_MS`（默认 30000）。
+
+行为细节（诚实披露）：
+
+- 向量库按库根隔离，落在 `~/.dsh/knj-obsidian/remote-embed/`，**绝不进 vault**；
+  刷新对账 = 页面 sha256 增量（未变页零 HTTP，消失页删向量）；单页全文单向量（超 6000 字截断，不做分块）
+- 服务探活（`GET /models`，3 秒超时）失败 → `modelPresent=false`，工具如实回报
+  「远程嵌入服务探活失败」，绝不假装可用
+- `wiki_search_semantic` / `wiki_drill` / `wiki_query` 语义兜底 / 触发层语义兜底 /
+  边栏「语义索引」自动与手动刷新——**全部走同一个分派点**（`selectSemanticRuntime`），
+  remote 模式下换的是引擎不是行为
+- 换后端 = 换模型 = 维度变化 → 旧向量索引作废，需点一次「更新索引」全量重建
 
 ## 路线
 
