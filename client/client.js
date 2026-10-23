@@ -824,7 +824,7 @@ window.__ModuleLoader__.load({
 				return i || (i = a(n), e[n] = i), i;
 			};
 		}
-		function h$1(a, e = "") {
+		function h$2(a, e = "") {
 			let t = typeof a == "string" ? a : a.source, n = {
 				replace: (i, r) => {
 					let o = typeof r == "string" ? r : r.source;
@@ -910,21 +910,21 @@ window.__ModuleLoader__.load({
 		var Ie = /^ {0,3}(#{1,6})(?=\s|$)(.*)(?:\n+|$)/;
 		var Y = / {0,3}(?:[*+-]|\d{1,9}[.)])/;
 		var fe = /^(?!bull |blockCode|fences|blockquote|heading|html|table)((?:.|\n(?!\s*?\n|bull |fences|blockquote|heading|hr|html|table))+?)\n {0,3}(=+|-+) *(?:\n+|$)/;
-		var me = h$1(fe).replace(/bull/g, Y).replace(/blockCode/g, /(?: {4}| {0,3}\t)/).replace(/fences/g, / {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g, / {0,3}>/).replace(/heading/g, / {0,3}#{1,6}(?:\s|$)/).replace(/hr/g, / {0,3}(?:(?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/).replace(/html/g, / {0,3}<[^\n>]+>\n/).replace(/\|table/g, "").getRegex();
-		var Be = h$1(fe).replace(/bull/g, Y).replace(/blockCode/g, /(?: {4}| {0,3}\t)/).replace(/fences/g, / {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g, / {0,3}>/).replace(/heading/g, / {0,3}#{1,6}(?:\s|$)/).replace(/hr/g, / {0,3}(?:(?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/).replace(/html/g, / {0,3}<[^\n>]+>\n/).replace(/table/g, / {0,3}\|?(?:[:\- ]*\|)+[\:\- ]*\n/).getRegex();
+		var me = h$2(fe).replace(/bull/g, Y).replace(/blockCode/g, /(?: {4}| {0,3}\t)/).replace(/fences/g, / {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g, / {0,3}>/).replace(/heading/g, / {0,3}#{1,6}(?:\s|$)/).replace(/hr/g, / {0,3}(?:(?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/).replace(/html/g, / {0,3}<[^\n>]+>\n/).replace(/\|table/g, "").getRegex();
+		var Be = h$2(fe).replace(/bull/g, Y).replace(/blockCode/g, /(?: {4}| {0,3}\t)/).replace(/fences/g, / {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g, / {0,3}>/).replace(/heading/g, / {0,3}#{1,6}(?:\s|$)/).replace(/hr/g, / {0,3}(?:(?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/).replace(/html/g, / {0,3}<[^\n>]+>\n/).replace(/table/g, / {0,3}\|?(?:[:\- ]*\|)+[\:\- ]*\n/).getRegex();
 		var ee = /^([^\n]+(?:\n(?!hr|heading|lheading|blockquote|fences|list|html|table|[ \t]+\n)[^\n]+)*)/;
 		var De = /^[^\n]+/;
 		var te = /(?!\s*\])(?:\\[\s\S]|[^\[\]\\])+/;
-		var qe = h$1(/^ {0,3}\[(label)\]: *(?:\n[ \t]*)?([^<\s][^\s]*|<.*?>)(?:(?: +(?:\n[ \t]*)?| *\n[ \t]*)(title))? *(?:\n+|$)/).replace("label", te).replace("title", /(?:"(?:\\"?|[^"\\])*"|'[^'\n]*(?:\n[^'\n]+)*\n?'|\([^()]*\))/).getRegex();
-		var Ze = h$1(/^(bull)([ \t][^\n]*?)?(?:\n|$)/).replace(/bull/g, Y).getRegex();
+		var qe = h$2(/^ {0,3}\[(label)\]: *(?:\n[ \t]*)?([^<\s][^\s]*|<.*?>)(?:(?: +(?:\n[ \t]*)?| *\n[ \t]*)(title))? *(?:\n+|$)/).replace("label", te).replace("title", /(?:"(?:\\"?|[^"\\])*"|'[^'\n]*(?:\n[^'\n]+)*\n?'|\([^()]*\))/).getRegex();
+		var Ze = h$2(/^(bull)([ \t][^\n]*?)?(?:\n|$)/).replace(/bull/g, Y).getRegex();
 		var Q = "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul";
 		var ne = /<!--(?:-?>|[\s\S]*?(?:-->|$))/;
-		var ve = h$1("^ {0,3}(?:<(script|pre|style|textarea)[\\s>][\\s\\S]*?(?:</\\1>[^\\n]*\\n*|$)|comment[^\\n]*(\\n+|$)|<\\?[\\s\\S]*?(?:\\?>[^\\n]*\\n*|$)|<![A-Z][\\s\\S]*?(?:>[^\\n]*\\n*|$)|<!\\[CDATA\\[[\\s\\S]*?(?:\\]\\]>[^\\n]*\\n*|$)|</?(tag)(?: +|\\n|/?>)[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|<(?!(?:script|pre|style|textarea)(?![a-z0-9-]))([a-z][a-z0-9-]*)(?:attribute)*? */?>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|</[a-z][a-z0-9-]*\\s*>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$))", "i").replace("comment", ne).replace("tag", Q).replace("attribute", / +[a-zA-Z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?/).getRegex();
-		var xe = (a) => h$1(ee).replace("hr", N).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("|lheading", "").replace("|table", "").replace("blockquote", " {0,3}>").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*(?:\\n|$))|~~~)[^\\n]*(?:\\n|$)").replace("list", a).replace("html", " {0,3}(?:</?(?:tag)(?: +|\\n|/?>)|<(?:(?:script|pre|style|textarea)(?:[\\s>]|$)|!--)|<\\?|<![A-Za-z]|<!\\[CDATA\\[)").replace("tag", Q).getRegex();
+		var ve = h$2("^ {0,3}(?:<(script|pre|style|textarea)[\\s>][\\s\\S]*?(?:</\\1>[^\\n]*\\n*|$)|comment[^\\n]*(\\n+|$)|<\\?[\\s\\S]*?(?:\\?>[^\\n]*\\n*|$)|<![A-Z][\\s\\S]*?(?:>[^\\n]*\\n*|$)|<!\\[CDATA\\[[\\s\\S]*?(?:\\]\\]>[^\\n]*\\n*|$)|</?(tag)(?: +|\\n|/?>)[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|<(?!(?:script|pre|style|textarea)(?![a-z0-9-]))([a-z][a-z0-9-]*)(?:attribute)*? */?>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|</[a-z][a-z0-9-]*\\s*>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$))", "i").replace("comment", ne).replace("tag", Q).replace("attribute", / +[a-zA-Z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?/).getRegex();
+		var xe = (a) => h$2(ee).replace("hr", N).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("|lheading", "").replace("|table", "").replace("blockquote", " {0,3}>").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*(?:\\n|$))|~~~)[^\\n]*(?:\\n|$)").replace("list", a).replace("html", " {0,3}(?:</?(?:tag)(?: +|\\n|/?>)|<(?:(?:script|pre|style|textarea)(?:[\\s>]|$)|!--)|<\\?|<![A-Za-z]|<!\\[CDATA\\[)").replace("tag", Q).getRegex();
 		var He = xe(/ {0,3}(?:[*+-]|1[.)])[ \t]+[^ \t\n]/);
 		var Ge = xe(/ {0,3}(?:[*+-]|\d{1,9}[.)])(?:[ \t]|\n|$)/);
 		var re = {
-			blockquote: h$1(/^( {0,3}> ?(paragraph|[^\n]*)(?:\n|$))+/).replace("paragraph", Ge).getRegex(),
+			blockquote: h$2(/^( {0,3}> ?(paragraph|[^\n]*)(?:\n|$))+/).replace("paragraph", Ge).getRegex(),
 			code: Me,
 			def: qe,
 			fences: Ce,
@@ -938,21 +938,21 @@ window.__ModuleLoader__.load({
 			table: M,
 			text: De
 		};
-		var de = h$1("^ *([^\\n ].*)\\n {0,3}((?:\\| *)?:?-+:? *(?:\\| *:?-+:? *)*(?:\\| *)?)(?:\\n((?:(?! *\\n|hr|heading|blockquote|code|fences|list|html).*(?:\\n|$))*)\\n*|$)").replace("hr", N).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("blockquote", " {0,3}>").replace("code", "(?: {4}| {0,3}	)[^\\n]").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*(?:\\n|$))|~~~)[^\\n]*(?:\\n|$)").replace("list", " {0,3}(?:[*+-]|1[.)])[ \\t]").replace("html", " {0,3}(?:</?(?:tag)(?: +|\\n|/?>)|<(?:(?:script|pre|style|textarea)(?:[\\s>]|$)|!--)|<\\?|<![A-Za-z]|<!\\[CDATA\\[)").replace("tag", Q).getRegex();
+		var de = h$2("^ *([^\\n ].*)\\n {0,3}((?:\\| *)?:?-+:? *(?:\\| *:?-+:? *)*(?:\\| *)?)(?:\\n((?:(?! *\\n|hr|heading|blockquote|code|fences|list|html).*(?:\\n|$))*)\\n*|$)").replace("hr", N).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("blockquote", " {0,3}>").replace("code", "(?: {4}| {0,3}	)[^\\n]").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*(?:\\n|$))|~~~)[^\\n]*(?:\\n|$)").replace("list", " {0,3}(?:[*+-]|1[.)])[ \\t]").replace("html", " {0,3}(?:</?(?:tag)(?: +|\\n|/?>)|<(?:(?:script|pre|style|textarea)(?:[\\s>]|$)|!--)|<\\?|<![A-Za-z]|<!\\[CDATA\\[)").replace("tag", Q).getRegex();
 		var Qe = {
 			...re,
 			lheading: Be,
 			table: de,
-			paragraph: h$1(ee).replace("hr", N).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("|lheading", "").replace("table", de).replace("blockquote", " {0,3}>").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*(?:\\n|$))|~~~)[^\\n]*(?:\\n|$)").replace("list", " {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html", " {0,3}(?:</?(?:tag)(?: +|\\n|/?>)|<(?:(?:script|pre|style|textarea)(?:[\\s>]|$)|!--)|<\\?|<![A-Za-z]|<!\\[CDATA\\[)").replace("tag", Q).getRegex()
+			paragraph: h$2(ee).replace("hr", N).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("|lheading", "").replace("table", de).replace("blockquote", " {0,3}>").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*(?:\\n|$))|~~~)[^\\n]*(?:\\n|$)").replace("list", " {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html", " {0,3}(?:</?(?:tag)(?: +|\\n|/?>)|<(?:(?:script|pre|style|textarea)(?:[\\s>]|$)|!--)|<\\?|<![A-Za-z]|<!\\[CDATA\\[)").replace("tag", Q).getRegex()
 		};
 		var je = {
 			...re,
-			html: h$1(`^ *(?:comment *(?:\\n|\\s*$)|<(tag)[\\s\\S]+?</\\1> *(?:\\n{2,}|\\s*$)|<tag(?:"[^"]*"|'[^']*'|\\s[^'"/>\\s]*)*?/?> *(?:\\n{2,}|\\s*$))`).replace("comment", ne).replace(/tag/g, "(?!(?:a|em|strong|small|s|cite|q|dfn|abbr|data|time|code|var|samp|kbd|sub|sup|i|b|u|mark|ruby|rt|rp|bdi|bdo|span|br|wbr|ins|del|img)\\b)\\w+(?!:|[^\\w\\s@]*@)\\b").getRegex(),
+			html: h$2(`^ *(?:comment *(?:\\n|\\s*$)|<(tag)[\\s\\S]+?</\\1> *(?:\\n{2,}|\\s*$)|<tag(?:"[^"]*"|'[^']*'|\\s[^'"/>\\s]*)*?/?> *(?:\\n{2,}|\\s*$))`).replace("comment", ne).replace(/tag/g, "(?!(?:a|em|strong|small|s|cite|q|dfn|abbr|data|time|code|var|samp|kbd|sub|sup|i|b|u|mark|ruby|rt|rp|bdi|bdo|span|br|wbr|ins|del|img)\\b)\\w+(?!:|[^\\w\\s@]*@)\\b").getRegex(),
 			def: /^ *\[([^\]]+)\]: *<?([^\s>]+)>?(?: +(["(][^\n]+[")]))? *(?:\n+|$)/,
 			heading: /^(#{1,6})(.*)(?:\n+|$)/,
 			fences: M,
 			lheading: /^(.+?)\n {0,3}(=+|-+) *(?:\n+|$)/,
-			paragraph: h$1(ee).replace("hr", N).replace("heading", ` *#{1,6} *[^
+			paragraph: h$2(ee).replace("hr", N).replace("heading", ` *#{1,6} *[^
 ]`).replace("lheading", me).replace("|table", "").replace("blockquote", " {0,3}>").replace("|fences", "").replace("|list", "").replace("|html", "").replace("|tag", "").getRegex()
 		};
 		var Fe = /^\\([!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~])/;
@@ -962,39 +962,39 @@ window.__ModuleLoader__.load({
 		var S = /[\p{P}\p{S}]/u;
 		var q = /[\s\p{P}\p{S}]/u;
 		var j = /[^\s\p{P}\p{S}]/u;
-		var Xe = h$1(/^((?![*_])punctSpace)/, "u").replace(/punctSpace/g, q).getRegex();
+		var Xe = h$2(/^((?![*_])punctSpace)/, "u").replace(/punctSpace/g, q).getRegex();
 		var We = /[\p{Pi}\p{Ps}"']/u;
 		var Re = /(?!~)[\p{P}\p{S}]/u;
 		var Ve = /(?!~)[\s\p{P}\p{S}]/u;
 		var Je = /(?:[^\s\p{P}\p{S}]|~)/u;
-		var Ye = h$1(/link|precode-code|html/, "g").replace("link", /\[(?:[^\[\]`]|(?<a>`+)[^`]+\k<a>(?!`))*?\]\((?:\\[\s\S]|[^\\\(\)]|\((?:\\[\s\S]|[^\\\(\)])*\))*\)/).replace("precode-", ze ? "(?<!`)()" : "(^^|[^`])").replace("code", /(?<b>`+)[^`]+\k<b>(?!`)/).replace("html", /<(?! )[^<>]*?>/).getRegex();
+		var Ye = h$2(/link|precode-code|html/, "g").replace("link", /\[(?:[^\[\]`]|(?<a>`+)[^`]+\k<a>(?!`))*?\]\((?:\\[\s\S]|[^\\\(\)]|\((?:\\[\s\S]|[^\\\(\)])*\))*\)/).replace("precode-", ze ? "(?<!`)()" : "(^^|[^`])").replace("code", /(?<b>`+)[^`]+\k<b>(?!`)/).replace("html", /<(?! )[^<>]*?>/).getRegex();
 		var Te = /^(?:\*+(?:((?!\*)punct)|([^\s*]))?)|^_+(?:((?!_)punct)|([^\s_]))?/;
-		var et = h$1(Te, "u").replace(/punct/g, S).getRegex();
-		var tt = h$1(Te, "u").replace(/punct/g, Re).getRegex();
-		var rt = h$1(/^(?:\*+(?:((?!\*)(?!openQuote)punct)|([^\s*]))?)|^_+(?:((?!_)(?!openQuote)punct)|([^\s_]))?/, "u").replace(/openQuote/g, We).replace(/punct/g, S).getRegex();
+		var et = h$2(Te, "u").replace(/punct/g, S).getRegex();
+		var tt = h$2(Te, "u").replace(/punct/g, Re).getRegex();
+		var rt = h$2(/^(?:\*+(?:((?!\*)(?!openQuote)punct)|([^\s*]))?)|^_+(?:((?!_)(?!openQuote)punct)|([^\s_]))?/, "u").replace(/openQuote/g, We).replace(/punct/g, S).getRegex();
 		var Oe = "^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)punctSpace(\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|notPunctSpace(\\*+)(?=notPunctSpace)";
-		var st = h$1(Oe, "gu").replace(/notPunctSpace/g, j).replace(/punctSpace/g, q).replace(/punct/g, S).getRegex();
-		var it = h$1(Oe, "gu").replace(/notPunctSpace/g, Je).replace(/punctSpace/g, Ve).replace(/punct/g, Re).getRegex();
-		var at = h$1("^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)[\\s](\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|(?:(?!\\*)punct|notPunctSpace)(\\*+)(?!\\*)(?=notPunctSpace)", "gu").replace(/notPunctSpace/g, j).replace(/punctSpace/g, q).replace(/punct/g, S).getRegex();
-		var lt = h$1("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)punctSpace(_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)", "gu").replace(/notPunctSpace/g, j).replace(/punctSpace/g, q).replace(/punct/g, S).getRegex();
-		var pt = h$1("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)[\\s](_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)|(?:(?!_)punct|notPunctSpace)(_+)(?!_)(?=notPunctSpace)", "gu").replace(/notPunctSpace/g, j).replace(/punctSpace/g, q).replace(/punct/g, S).getRegex();
-		var ct = h$1(/^~~?(?:((?!~)punct)|[^\s~])/, "u").replace(/punct/g, S).getRegex();
-		var dt = h$1("^[^~]+(?=[^~])|(?!~)punct(~~?)(?=[\\s]|$)|notPunctSpace(~~?)(?!~)(?=punctSpace|$)|(?!~)punctSpace(~~?)(?=notPunctSpace)|[\\s](~~?)(?!~)(?=punct)|(?!~)punct(~~?)(?!~)(?=punct)|notPunctSpace(~~?)(?=notPunctSpace)", "gu").replace(/notPunctSpace/g, j).replace(/punctSpace/g, q).replace(/punct/g, S).getRegex();
-		var kt = h$1(/\\(punct)/, "gu").replace(/punct/g, S).getRegex();
-		var gt = h$1(/(`+)(?:[^`]|[^`][\s\S]*?[^`])\1(?!`)|`+|\\(punct)/, "gu").replace(/punct/g, S).getRegex();
-		var ft = h$1(/^<(scheme:[^\s\x00-\x1f<>]*|email)>/).replace("scheme", /[a-zA-Z][a-zA-Z0-9+.-]{1,31}/).replace("email", /[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])/).getRegex();
-		var mt = h$1(ne).replace("(?:-->|$)", "-->").getRegex();
-		var xt = h$1("^comment|^</[a-zA-Z][a-zA-Z0-9-]*\\s*>|^<[a-zA-Z][a-zA-Z0-9-]*(?:attribute)*?\\s*/?>|^<\\?[\\s\\S]*?\\?>|^<![a-zA-Z]+\\s[\\s\\S]*?>|^<!\\[CDATA\\[[\\s\\S]*?\\]\\]>").replace("comment", mt).replace("attribute", /\s+[a-zA-Z:_][\w.:-]*(?:\s*=\s*"[^"]*"|\s*=\s*'[^']*'|\s*=\s*[^\s"'=<>`]+)?/).getRegex();
+		var st = h$2(Oe, "gu").replace(/notPunctSpace/g, j).replace(/punctSpace/g, q).replace(/punct/g, S).getRegex();
+		var it = h$2(Oe, "gu").replace(/notPunctSpace/g, Je).replace(/punctSpace/g, Ve).replace(/punct/g, Re).getRegex();
+		var at = h$2("^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)[\\s](\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|(?:(?!\\*)punct|notPunctSpace)(\\*+)(?!\\*)(?=notPunctSpace)", "gu").replace(/notPunctSpace/g, j).replace(/punctSpace/g, q).replace(/punct/g, S).getRegex();
+		var lt = h$2("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)punctSpace(_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)", "gu").replace(/notPunctSpace/g, j).replace(/punctSpace/g, q).replace(/punct/g, S).getRegex();
+		var pt = h$2("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)[\\s](_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)|(?:(?!_)punct|notPunctSpace)(_+)(?!_)(?=notPunctSpace)", "gu").replace(/notPunctSpace/g, j).replace(/punctSpace/g, q).replace(/punct/g, S).getRegex();
+		var ct = h$2(/^~~?(?:((?!~)punct)|[^\s~])/, "u").replace(/punct/g, S).getRegex();
+		var dt = h$2("^[^~]+(?=[^~])|(?!~)punct(~~?)(?=[\\s]|$)|notPunctSpace(~~?)(?!~)(?=punctSpace|$)|(?!~)punctSpace(~~?)(?=notPunctSpace)|[\\s](~~?)(?!~)(?=punct)|(?!~)punct(~~?)(?!~)(?=punct)|notPunctSpace(~~?)(?=notPunctSpace)", "gu").replace(/notPunctSpace/g, j).replace(/punctSpace/g, q).replace(/punct/g, S).getRegex();
+		var kt = h$2(/\\(punct)/, "gu").replace(/punct/g, S).getRegex();
+		var gt = h$2(/(`+)(?:[^`]|[^`][\s\S]*?[^`])\1(?!`)|`+|\\(punct)/, "gu").replace(/punct/g, S).getRegex();
+		var ft = h$2(/^<(scheme:[^\s\x00-\x1f<>]*|email)>/).replace("scheme", /[a-zA-Z][a-zA-Z0-9+.-]{1,31}/).replace("email", /[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])/).getRegex();
+		var mt = h$2(ne).replace("(?:-->|$)", "-->").getRegex();
+		var xt = h$2("^comment|^</[a-zA-Z][a-zA-Z0-9-]*\\s*>|^<[a-zA-Z][a-zA-Z0-9-]*(?:attribute)*?\\s*/?>|^<\\?[\\s\\S]*?\\?>|^<![a-zA-Z]+\\s[\\s\\S]*?>|^<!\\[CDATA\\[[\\s\\S]*?\\]\\]>").replace("comment", mt).replace("attribute", /\s+[a-zA-Z:_][\w.:-]*(?:\s*=\s*"[^"]*"|\s*=\s*'[^']*'|\s*=\s*[^\s"'=<>`]+)?/).getRegex();
 		var we = /\[(?:\\[\s\S]|[^\[\]\\])*\]/;
-		var K = h$1(/(?:\[(?:brackets|\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\])|[^\[\]\\`])*?/).replace("brackets", we).getRegex();
-		var bt = h$1(/^!?\[(label)\]\([ \t\n]*(href)(?:(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)(title))?[ \t\n]*\)/).replace("label", K).replace("href", /<(?:\\.|[^\n<>\\])+>|[^ \t\n\x00-\x1f]+|(?=\))/).replace("title", /"(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)/).getRegex();
-		var Rt = h$1(/^!?\[(label)\]\[(ref)\]/).replace("label", K).replace("ref", te).getRegex();
-		var Tt = h$1(/^!?\[(ref)\](?:\[\])?/).replace("ref", te).getRegex();
+		var K = h$2(/(?:\[(?:brackets|\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\])|[^\[\]\\`])*?/).replace("brackets", we).getRegex();
+		var bt = h$2(/^!?\[(label)\]\([ \t\n]*(href)(?:(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)(title))?[ \t\n]*\)/).replace("label", K).replace("href", /<(?:\\.|[^\n<>\\])+>|[^ \t\n\x00-\x1f]+|(?=\))/).replace("title", /"(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)/).getRegex();
+		var Rt = h$2(/^!?\[(label)\]\[(ref)\]/).replace("label", K).replace("ref", te).getRegex();
+		var Tt = h$2(/^!?\[(ref)\](?:\[\])?/).replace("ref", te).getRegex();
 		var ke = /(?!\s*\])(?:\\[\s\S]|[^\[\]\\]){1,999}/;
-		var Ot = h$1(/(?:[^\[\]\\`]*(?:\[(?:brackets|\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\]))){0,999}?[^\[\]\\`]*?/).replace("brackets", we).getRegex();
-		var wt = h$1("reflink|nolink(?!\\()", "g").replace("reflink", h$1(/^!?\[(label)\]\[(ref)\]/).replace("label", Ot).replace("ref", ke).getRegex()).replace("nolink", h$1(/^!?\[(ref)\](?:\[\])?/).replace("ref", ke).getRegex()).getRegex();
+		var Ot = h$2(/(?:[^\[\]\\`]*(?:\[(?:brackets|\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\]))){0,999}?[^\[\]\\`]*?/).replace("brackets", we).getRegex();
+		var wt = h$2("reflink|nolink(?!\\()", "g").replace("reflink", h$2(/^!?\[(label)\]\[(ref)\]/).replace("label", Ot).replace("ref", ke).getRegex()).replace("nolink", h$2(/^!?\[(ref)\](?:\[\])?/).replace("ref", ke).getRegex()).getRegex();
 		var ge = /[hH][tT][tT][pP][sS]?|[fF][tT][pP]/;
-		var yt = h$1(/(?:mailto:email|xmpp:email(?:\/[A-Za-z0-9@.]+)?)/).replace(/email/g, /[A-Za-z0-9._+-]+@[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![\w-])/).getRegex();
+		var yt = h$2(/(?:mailto:email|xmpp:email(?:\/[A-Za-z0-9@.]+)?)/).replace(/email/g, /[A-Za-z0-9._+-]+@[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![\w-])/).getRegex();
 		var se = {
 			_backpedal: M,
 			anyPunctuation: kt,
@@ -1024,8 +1024,8 @@ window.__ModuleLoader__.load({
 			emStrongLDelim: rt,
 			emStrongRDelimAst: at,
 			emStrongRDelimUnd: pt,
-			link: h$1(/^!?\[(label)\]\((.*?)\)/).replace("label", K).getRegex(),
-			reflink: h$1(/^!?\[(label)\]\s*\[([^\]]*)\]/).replace("label", K).getRegex()
+			link: h$2(/^!?\[(label)\]\((.*?)\)/).replace("label", K).getRegex(),
+			reflink: h$2(/^!?\[(label)\]\s*\[([^\]]*)\]/).replace("label", K).getRegex()
 		};
 		var J = {
 			...se,
@@ -1033,15 +1033,15 @@ window.__ModuleLoader__.load({
 			emStrongLDelim: tt,
 			delLDelim: ct,
 			delRDelim: dt,
-			url: h$1(/^emailProtocol|^((?:protocol):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*|^email/).replace("emailProtocol", yt).replace("protocol", ge).replace("email", /[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![\w-])/).getRegex(),
+			url: h$2(/^emailProtocol|^((?:protocol):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*|^email/).replace("emailProtocol", yt).replace("protocol", ge).replace("email", /[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![\w-])/).getRegex(),
 			_backpedal: /(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/,
 			del: /^(~~?)(?=[^\s~])((?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s~\\]))\1(?=[^~]|$)/,
-			text: h$1(/^(?:[^a-zA-Z0-9](?=emailProtocol)|(`+|~+|[^`~])(?:(?=[`~])|(?= {2,}\n)|(?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)|[\s\S]*?(?:(?=[\\<!\[`*~_]|\b_|protocol:\/\/|www\.|$)|[^ ](?= {2,}\n)|[^a-zA-Z0-9](?=emailProtocol)|[^a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-](?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@))))/).replace("protocol", ge).replace(/emailProtocol/g, /(?:mailto|xmpp):/).getRegex()
+			text: h$2(/^(?:[^a-zA-Z0-9](?=emailProtocol)|(`+|~+|[^`~])(?:(?=[`~])|(?= {2,}\n)|(?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)|[\s\S]*?(?:(?=[\\<!\[`*~_]|\b_|protocol:\/\/|www\.|$)|[^ ](?= {2,}\n)|[^a-zA-Z0-9](?=emailProtocol)|[^a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-](?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@))))/).replace("protocol", ge).replace(/emailProtocol/g, /(?:mailto|xmpp):/).getRegex()
 		};
 		var _t = {
 			...J,
-			br: h$1(be).replace("{2,}", "*").getRegex(),
-			text: h$1(J.text).replace("\\b_", "\\b_| {2,}\\n").replace(/\{2,\}/g, "*").getRegex()
+			br: h$2(be).replace("{2,}", "*").getRegex(),
+			text: h$2(J.text).replace("\\b_", "\\b_| {2,}\\n").replace(/\{2,\}/g, "*").getRegex()
 		};
 		var F = {
 			normal: re,
@@ -7794,6 +7794,371 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			if (typeof document === "undefined") return;
 			document.getElementById("dsh-knj-obsidian-styles")?.remove();
 		}
+		// src/client/SettingsPage.tsx
+		/**
+		* dsh-knj-obsidian 设置页（客户端）：把本插件的 Config namespace（dsh-knj-obsidian）
+		* 注册进官方设置页的「插件」分页（plugins.item slot）。
+		*
+		* 为什么必须由客户端注册（2026-10-23 实机结论）：宿主的设置 UI 不会为任意 describe 行
+		* 自动生成导航——每个第三方插件在自己的 client bundle 里用
+		* `configForms.whileServed([ns], () => slots.inject('plugins.item', …))` 注册页面
+		* （参照 @deepseek-ai/dsh-client-ui-settings-web-search）。Host  serving 该 namespace 期间
+		* 页面存在；不 serving（未部署/未启用）时不留痕迹。
+		*
+		* 表单直接读 `configForms.get(ns)` 的 scope 快照（getSnapshot/subscribe/mutate 公开契约，
+		* 参照 dsh-client-ui-primitives 的 SettingsFormScope），保存 = 一次 revision 围栏的
+		* mutate（path 为段数组）。embedKey 写-only：draft 留空 = 不产生该字段的 op。
+		*/
+		const SETTINGS_NS = "dsh-knj-obsidian";
+		const SEMANTIC = [
+			{
+				path: ["semantic", "embed"],
+				label: "嵌入后端",
+				kind: "choice",
+				choices: [
+					"local",
+					"remote",
+					"off"
+				],
+				hint: "local=本机 GGUF；remote=调 OpenAI 兼容接口（本机不加载模型）"
+			},
+			{
+				path: ["semantic", "embedUrl"],
+				label: "远程嵌入接口地址",
+				kind: "text",
+				hint: "OpenAI 兼容根地址（含 /v1）；embed=remote 时必填"
+			},
+			{
+				path: ["semantic", "embedKey"],
+				label: "远程接口密钥",
+				kind: "password",
+				writeOnly: true,
+				hint: "留空 = 保持现值"
+			},
+			{
+				path: ["semantic", "embedModel"],
+				label: "嵌入模型",
+				kind: "text",
+				hint: "留空 = baai/bge-m3"
+			},
+			{
+				path: ["semantic", "embedDims"],
+				label: "向量维度（0=自动）",
+				kind: "number"
+			},
+			{
+				path: ["semantic", "embedBatch"],
+				label: "批量大小",
+				kind: "number"
+			},
+			{
+				path: ["semantic", "embedTimeoutMs"],
+				label: "请求超时（毫秒）",
+				kind: "number"
+			},
+			{
+				path: ["semantic", "semanticFallback"],
+				label: "语义兜底",
+				kind: "boolean"
+			},
+			{
+				path: ["semantic", "drill"],
+				label: "wiki_drill 下钻",
+				kind: "boolean"
+			},
+			{
+				path: ["semantic", "autoRefresh"],
+				label: "入库后自动刷新索引",
+				kind: "boolean"
+			}
+		];
+		const TRIGGER = [
+			{
+				path: ["trigger", "enabled"],
+				label: "知识触发总闸",
+				kind: "boolean"
+			},
+			{
+				path: ["trigger", "fulltext"],
+				label: "L1 二档（追投正文）",
+				kind: "boolean"
+			},
+			{
+				path: ["trigger", "vaultIdentity"],
+				label: "L0 库身份注入",
+				kind: "boolean"
+			},
+			{
+				path: ["trigger", "recurrence"],
+				label: "L3 失败复发提醒",
+				kind: "boolean"
+			},
+			{
+				path: ["trigger", "subagent"],
+				label: "子代理也触发",
+				kind: "boolean"
+			},
+			{
+				path: ["trigger", "gate"],
+				label: "L2 高危门强度",
+				kind: "choice",
+				choices: [
+					"off",
+					"warn",
+					"block"
+				],
+				hint: "默认 off：唯一会打断的一层"
+			},
+			{
+				path: ["trigger", "writeGate"],
+				label: "写入闸",
+				kind: "choice",
+				choices: [
+					"off",
+					"ask",
+					"block"
+				],
+				hint: "默认 off：开着会误伤 UI 蒸馏"
+			},
+			{
+				path: ["trigger", "missLog"],
+				label: "未命中埋点",
+				kind: "boolean"
+			}
+		];
+		const TOP = [{
+			path: ["vaultRegistryFile"],
+			label: "vault 注册表路径",
+			kind: "text",
+			hint: "留空 = 默认（~/.dsh/knj-obsidian/vaults.json）；改动需重载插件"
+		}];
+		const ALL_FIELDS = [
+			...SEMANTIC,
+			...TRIGGER,
+			...TOP
+		];
+		/** 从快照 value 展开成扁平 draft（embedKey 恒空 = write-only）。 */
+		function draftsFrom(value) {
+			const drafts = {};
+			const read = (path) => {
+				let cur = value;
+				for (const seg of path) cur = cur === null || typeof cur !== "object" ? void 0 : cur[seg];
+				return cur;
+			};
+			for (const field of ALL_FIELDS) {
+				const raw = read(field.path);
+				if (field.kind === "boolean") drafts[field.path.join(".")] = raw === true;
+				else if (field.kind === "number") drafts[field.path.join(".")] = String(typeof raw === "number" ? raw : "");
+				else if (field.writeOnly) drafts[field.path.join(".")] = "";
+				else drafts[field.path.join(".")] = typeof raw === "string" ? raw : "";
+			}
+			return drafts;
+		}
+		/** Knj 设置卡片：订阅 configForms scope，本地暂存，保存 = 一次 revision 围栏 mutate。 */
+		function KnjSettingsCard({ scope }) {
+			const snapshot = (0, react.useSyncExternalStore)((0, react.useCallback)((listener) => scope.subscribe(listener), [scope]), (0, react.useCallback)(() => scope.getSnapshot(), [scope]));
+			const [drafts, setDrafts] = (0, react.useState)(() => draftsFrom(snapshot?.value));
+			const [saving, setSaving] = (0, react.useState)(false);
+			const [note, setNote] = (0, react.useState)("");
+			(0, react.useEffect)(() => {
+				setDrafts(draftsFrom(snapshot?.value));
+			}, [snapshot?.revision]);
+			const setDraft = (key, value) => setDrafts((prev) => ({
+				...prev,
+				[key]: value
+			}));
+			const save = (0, react.useCallback)(async () => {
+				if (!snapshot?.writable || saving) return;
+				const ops = [];
+				for (const field of ALL_FIELDS) {
+					const key = field.path.join(".");
+					const draft = drafts[key];
+					const current = field.path.reduce((acc, seg) => {
+						const cur = acc;
+						return cur === null || cur === void 0 ? void 0 : cur[seg];
+					}, snapshot.value ?? {});
+					if (field.kind === "boolean") {
+						if (Boolean(draft) !== (current === true)) ops.push({
+							op: "set",
+							path: field.path,
+							value: draft === true
+						});
+						continue;
+					}
+					if (field.writeOnly) {
+						if (typeof draft === "string" && draft.trim() !== "") ops.push({
+							op: "set",
+							path: field.path,
+							value: draft.trim()
+						});
+						continue;
+					}
+					if (field.kind === "number") {
+						const n = Number.parseInt(String(draft), 10);
+						if (Number.isFinite(n) && n !== current) ops.push({
+							op: "set",
+							path: field.path,
+							value: n
+						});
+						continue;
+					}
+					const next = String(draft ?? "");
+					if (next !== String(current ?? "")) ops.push({
+						op: "set",
+						path: field.path,
+						value: next
+					});
+				}
+				if (ops.length === 0) {
+					setNote("没有需要保存的修改。");
+					return;
+				}
+				setSaving(true);
+				setNote("");
+				try {
+					const ok = await scope.mutate(ops, snapshot.revision);
+					setNote(ok ? "已保存（volatile 字段即时生效）。" : "保存被拒绝：请刷新页面后重试（revision 冲突已自动恢复）。");
+				} catch (error) {
+					setNote(`保存失败：${error instanceof Error ? error.message : String(error)}`);
+				} finally {
+					setSaving(false);
+				}
+			}, [
+				drafts,
+				saving,
+				scope,
+				snapshot
+			]);
+			const status = snapshot?.status ?? "loading";
+			if (status !== "ready") return (0, react.createElement)("div", { className: "knj-settings-card" }, status === "loading" ? "设置加载中…" : "当前部署未提供此插件的设置。");
+			const disabled = !snapshot.writable || saving;
+			const renderGroup = (title, fields) => (0, react.createElement)("div", {
+				key: title,
+				style: { marginBottom: 14 }
+			}, (0, react.createElement)("div", { style: {
+				fontWeight: 600,
+				margin: "6px 0"
+			} }, title), fields.map((field) => {
+				const key = field.path.join(".");
+				const value = drafts[key];
+				const inputStyle = {
+					width: "100%",
+					boxSizing: "border-box",
+					marginBottom: 2
+				};
+				return field.kind === "boolean" ? (0, react.createElement)("label", {
+					key,
+					style: {
+						display: "flex",
+						alignItems: "center",
+						gap: 6
+					}
+				}, (0, react.createElement)("input", {
+					type: "checkbox",
+					checked: value === true,
+					disabled,
+					onChange: (e) => setDraft(key, e.target.checked)
+				}), (0, react.createElement)("span", null, field.label)) : (0, react.createElement)("label", {
+					key,
+					style: {
+						display: "block",
+						marginBottom: 8
+					}
+				}, (0, react.createElement)("span", { style: {
+					display: "block",
+					fontSize: 12,
+					opacity: .85,
+					marginBottom: 2
+				} }, field.label), field.kind === "choice" ? (0, react.createElement)("select", {
+					value: String(value ?? ""),
+					disabled,
+					style: inputStyle,
+					onChange: (e) => setDraft(key, e.target.value)
+				}, (field.choices ?? []).map((c) => (0, react.createElement)("option", {
+					key: c,
+					value: c
+				}, c))) : (0, react.createElement)("input", {
+					type: field.kind === "password" ? "password" : field.kind === "number" ? "number" : "text",
+					value: String(value ?? ""),
+					disabled,
+					spellCheck: false,
+					style: inputStyle,
+					onChange: (e) => setDraft(key, e.target.value)
+				}), field.hint ? (0, react.createElement)("span", { style: {
+					display: "block",
+					fontSize: 11,
+					opacity: .6
+				} }, field.hint) : null);
+			}));
+			return (0, react.createElement)("div", {
+				className: "knj-settings-card",
+				style: { maxWidth: 560 }
+			}, (0, react.createElement)("div", { style: {
+				marginBottom: 10,
+				opacity: .8
+			} }, "知识库（Obsidian）插件的运行时设置。修改即保存在 profile 的 user 层；env 变量仍然优先于这里的值。"), renderGroup("语义 / 嵌入", SEMANTIC), renderGroup("触发 / 闸门", TRIGGER), renderGroup("其它", TOP), (0, react.createElement)("div", { style: {
+				display: "flex",
+				alignItems: "center",
+				gap: 8,
+				marginTop: 6
+			} }, (0, react.createElement)("button", {
+				disabled: disabled || saving,
+				onClick: () => {
+					save();
+				},
+				style: { padding: "4px 14px" }
+			}, saving ? "保存中…" : "保存"), (0, react.createElement)("button", {
+				disabled: saving,
+				onClick: () => setDrafts(draftsFrom(snapshot.value)),
+				style: { padding: "4px 10px" }
+			}, "放弃修改"), note ? (0, react.createElement)("span", { style: {
+				fontSize: 12,
+				opacity: .85
+			} }, note) : null), !snapshot.writable ? (0, react.createElement)("div", { style: {
+				marginTop: 6,
+				fontSize: 12,
+				opacity: .7
+			} }, "当前访问方式下设置为只读（非回环页面由宿主限制）。请从 127.0.0.1:3080 打开设置页编辑，或走 /api/obsidian-wiki/config。") : null);
+		}
+		/**
+		* 在 client 入口调用：注册进官方设置页的「插件」分页。
+		* Host 未 serving 本 namespace（插件未启用/未部署）时不留任何痕迹；configForms/slots
+		* 服务缺失（极端裁剪宿主）时返回 undefined，不影响其余客户端功能。
+		*/
+		function mountSettingsPage(ctx) {
+			const getService = (name) => {
+				try {
+					const viaGet = typeof ctx.get === "function" ? ctx.get(name) : void 0;
+					if (viaGet !== void 0 && viaGet !== null) return viaGet;
+				} catch {}
+			};
+			const configForms = getService("configForms");
+			const slots = getService("slots");
+			if (!configForms || !slots || typeof configForms.get !== "function" || typeof configForms.whileServed !== "function") return void 0;
+			const scope = configForms.get(SETTINGS_NS);
+			const card = () => (0, react.createElement)(KnjSettingsCard, { scope });
+			let slotDisposer;
+			const off = configForms.whileServed([SETTINGS_NS], () => {
+				try {
+					slotDisposer = slots.inject("plugins.item", () => slots.register({
+						name: "plugins.item",
+						id: "dsh-knj-obsidian",
+						order: 80,
+						label: () => "知识库（Obsidian）"
+					}, card));
+				} catch (error) {
+					console.warn("[knj] settings page registration failed:", String(error));
+				}
+			});
+			return () => {
+				try {
+					off?.();
+				} catch {}
+				try {
+					slotDisposer?.();
+				} catch {}
+			};
+		}
 		// src/client/index.ts
 		/**
 		* dsh-knj-obsidian client: registers the "知识库" sidebar tab and the
@@ -7805,7 +8170,9 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			"betterSidebar",
 			"workspaces",
 			"sessions",
-			"conversation"
+			"conversation",
+			"configForms",
+			"slots"
 		];
 		/** 双通道取宿主 client 服务：新版 ctx.get(name) → 旧版 ctx[name] 属性。 */
 		function hostService(ctx, name) {
@@ -8076,6 +8443,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 					title: "笔记",
 					component: (props) => (0, react.createElement)(NoteWorkbench, { path: props.tab?.path })
 				}));
+				const settingsPageDisposer = mountSettingsPage(ctx);
+				if (settingsPageDisposer) disposers.push(settingsPageDisposer);
 				return () => {
 					for (const d of disposers) d();
 					removeWikiStyles();
