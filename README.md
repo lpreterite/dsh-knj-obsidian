@@ -563,9 +563,12 @@ v16 开始把 18 个 `KNJ_OBSIDIAN_*` 环境变量迁入 DSH 设置页（issue #
   **local↔remote↔off 热切换不用重启**。`vaultRegistryFile` 保持普通字段（改动走条目重挂载）
 - **非 loopback 编辑通道**：官方 configForms 在非回环页面被宿主置为 memory 模式（一律
   unavailable，官方设计）。本版挂 `GET/POST /api/obsidian-wiki/config`（走宿主侧
-  SettingsForms describe/mutate，`expectedRevision` 冲突返回 409；**embedKey 永不明文回传**，
-  下发置空、留空=保持现值；访问栅栏 loopback 放行 + remote-web-ui 配对设备），让
-  Tailscale/配对访问下照常可改
+  SettingsForms describe/mutate，**POST ops 形状：`{"path": ["semantic","embedKey"], "value": …}`
+  ——path 必须是段数组**，字符串会被宿主 `path.join is not a function` 拒绝；`expectedRevision`
+  冲突返回 409；**embedKey 永不明文回传**，下发置空、留空=保持现值；访问栅栏 loopback 放行 +
+  remote-web-ui 配对设备），让 Tailscale/配对访问下照常可改。
+  **注意：自动生成的原生表单只在回环页面渲染**——LAN 页面上 knj 不显示设置节是宿主设计，
+  不是故障；LAN 改配置走本通道
 - **依赖**：新增 optional peer `@deepseek-ai/dsh-settings`（`>=0.1.5-rc.2 <0.2.1-0 ||
   >=0.2.0-rc.1 <0.3.0` 双线收口）；宿主没有 settings 服务时 HTTP 通道静默跳过，不影响
   tools/routes。peer 基线校验器新增 `PEER_BASELINE_OVERRIDES`（首发晚于仓库基线的包只查其
