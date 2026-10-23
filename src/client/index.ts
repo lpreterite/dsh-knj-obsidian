@@ -7,6 +7,7 @@ import { createElement as h } from 'react'
 import { WikiSidebar } from './WikiSidebar.tsx'
 import { NoteWorkbench } from './NoteWorkbench.tsx'
 import { injectWikiStyles, removeWikiStyles } from './styles.ts'
+import { mountSettingsPage } from './SettingsPage.tsx'
 import type { SessionFace, WorkspaceFace } from './VaultHeader.tsx'
 
 export const name = 'dsh-knj-obsidian'
@@ -63,7 +64,7 @@ interface SessionServiceFace extends SessionFace {
   refresh?(): Promise<void> | void
 }
 
-export const inject = ['betterSidebar', 'workspaces', 'sessions', 'conversation']
+export const inject = ['betterSidebar', 'workspaces', 'sessions', 'conversation', 'configForms', 'slots']
 
 /** 双通道取宿主 client 服务：新版 ctx.get(name) → 旧版 ctx[name] 属性。 */
 function hostService<T>(ctx: ClientContext, name: string): T | undefined {
@@ -278,6 +279,10 @@ export function apply(ctx: ClientContext): void {
       title: '笔记',
       component: (props: { tab?: { path?: string } }) => h(NoteWorkbench, { path: props.tab?.path }),
     }))
+    // v16 设置页：把本插件 namespace 注册进官方设置页「插件」分页（plugins.item slot）。
+    // configForms/slots 服务缺失（极端裁剪宿主）时返回 undefined，不影响边栏标签。
+    const settingsPageDisposer = mountSettingsPage(ctx)
+    if (settingsPageDisposer) disposers.push(settingsPageDisposer)
     return () => {
       for (const d of disposers) d()
       // 卸载/HMR 时移除注入的 <style>，避免旧版本 CSS 常驻 DOM
