@@ -584,6 +584,15 @@ v16 开始把 18 个 `KNJ_OBSIDIAN_*` 环境变量迁入 DSH 设置页（issue #
   （即 profile patch 文档）生成——文档里没有这个 entry，`SettingsForms.describe()` 就不产出行，
   设置页无此节、`/api/obsidian-wiki/config` GET 也 404（'entry not active'）。修复 = 往 profile
   patch 补两行条目后重启
+- **设置页可见的另一半（客户端注册，p10）**：describe 行存在 ≠ 设置页有节。设置 UI **不会**
+  为任意行自动生成导航——每个插件要在自己的 client bundle 里
+  `configForms.whileServed([ns], () => slots.inject('plugins.item', …))` 向「插件」分页注册卡片，
+  并把 `@deepseek-ai/dsh-client-ui-settings` / `@deepseek-ai/dsh-client-ui-plugin-manager` /
+  `@deepseek-ai/dsh-client-locale` 加进 `dsh.client.inject`（参照
+  `@deepseek-ai/dsh-client-ui-settings-web-search` 的 client 实现）。knj 的注册在
+  `src/client/SettingsPage.tsx`（p10 起）：卡片读 `configForms.get(ns)` 的 scope，
+  保存 = 一次 revision 围栏 mutate。三层齐了设置节才可见：**patch 条目（服务端行）+
+  客户端注册（UI 节）+ 回环访问（表单可编辑）**
 
 ## 路线
 
