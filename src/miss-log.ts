@@ -13,6 +13,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { missLogOff } from './settings.ts'
 
 export interface QueryMissEntry {
   /** ISO 时间戳。 */
@@ -36,9 +37,10 @@ const FILE_NAME = 'query-misses.jsonl'
 /** 上限：日志不能无限膨胀（超上限保留最近 N 条）。 */
 const DEFAULT_MAX_ENTRIES = 2000
 
-/** 开关：KNJ_OBSIDIAN_MISS_LOG=off 关闭（默认开启——这一阶段就是要攒数据）。 */
+/** 开关：KNJ_OBSIDIAN_MISS_LOG=off 关闭（默认开启——这一阶段就是要攒数据）。
+ *  优先级：env 覆盖 > 设置面板（trigger.missLog）> 默认开。 */
 export function missLogEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return (env.KNJ_OBSIDIAN_MISS_LOG ?? '').trim().toLowerCase() !== 'off'
+  return !missLogOff(env)
 }
 
 function resolveHome(home?: string): string {

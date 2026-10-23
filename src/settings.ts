@@ -49,8 +49,29 @@ export interface SemanticSettings {
   autoRefresh: boolean
 }
 
+/** 触发/闸门组设置（第二批面板化的 8 个；对应 KNJ_OBSIDIAN_TRIGGER* / GATE / WRITE_GATE / MISS_LOG）。 */
+export interface TriggerSettings {
+  /** 总闸：KNJ_OBSIDIAN_TRIGGER=off / 面板 false → L0/L1/L3 全关 */
+  enabled: boolean
+  /** L1 二档（追投正文）：默认开——「漏」是实测最痛的失败模式 */
+  fulltext: boolean
+  /** L0 身份块注入：默认开 */
+  vaultIdentity: boolean
+  /** L3 失败复发提醒：默认开（噪声最低的一层） */
+  recurrence: boolean
+  /** 子代理会话也触发：默认开；噪声明显时可关 */
+  subagent: boolean
+  /** L2 高危合取门强度：默认 off（唯一会打断的一层，兜底不是主药） */
+  gate: 'off' | 'warn' | 'block'
+  /** 写入闸：默认 off（开着会误伤用户自己点的蒸馏；显式 opt-in） */
+  writeGate: 'off' | 'ask' | 'block'
+  /** 未命中埋点：默认开（这一阶段就是要攒数据） */
+  missLog: boolean
+}
+
 export interface KnjConfig {
   semantic: SemanticSettings
+  trigger: TriggerSettings
   vaultRegistryFile: string
 }
 
@@ -71,6 +92,16 @@ export const KnjConfigSchema = z.object({
     semanticFallback: z.boolean().default(true),
     drill: z.boolean().default(true),
     autoRefresh: z.boolean().default(true),
+  }).volatile(),
+  trigger: z.object({
+    enabled: z.boolean().default(true),
+    fulltext: z.boolean().default(true),
+    vaultIdentity: z.boolean().default(true),
+    recurrence: z.boolean().default(true),
+    subagent: z.boolean().default(true),
+    gate: z.union(['off', 'warn', 'block']).default('off'),
+    writeGate: z.union(['off', 'ask', 'block']).default('off'),
+    missLog: z.boolean().default(true),
   }).volatile(),
   vaultRegistryFile: z.string().default(''),
 })
@@ -97,7 +128,21 @@ export const DEFAULT_SEMANTIC_SETTINGS: SemanticSettings = {
   autoRefresh: true,
 }
 
+/** 触发/闸门组的内置默认（全部默认开、两道闸默认 off——与历史 env 缺省逐字节一致）。 */
+export const DEFAULT_TRIGGER_SETTINGS: TriggerSettings = {
+  enabled: true,
+  fulltext: true,
+  vaultIdentity: true,
+  recurrence: true,
+  subagent: true,
+  gate: 'off',
+  writeGate: 'off',
+  missLog: true,
+}
+
 const EMBED_PROVIDERS: ReadonlySet<string> = new Set(['local', 'remote', 'off'])
+const GATE_MODES: ReadonlySet<string> = new Set(['off', 'warn', 'block'])
+const WRITE_GATE_MODES: ReadonlySet<string> = new Set(['off', 'ask', 'block'])
 
 /** 解包 rawConfig 里的 volatile 引用（幂等：普通值原样通过），并兜 schema 默认。 */
 export function resolveKnjConfig(raw: unknown): KnjConfig {
@@ -105,21 +150,35 @@ export function resolveKnjConfig(raw: unknown): KnjConfig {
   const semanticRaw = (readLeaf<Partial<SemanticSettings>>(src.semantic) ?? {}) as Partial<SemanticSettings>
   const embed = EMBED_PROVIDERS.has(String(semanticRaw.embed)) ? semanticRaw.embed as SemanticSettings['embed'] : DEFAULT_SEMANTIC_SETTINGS.embed
   const semantic: SemanticSettings = { ...DEFAULT_SEMANTIC_SETTINGS, ...semanticRaw, embed }
+  const triggerRaw = (readLeaf<Partial<TriggerSettings>>(src.trigger) ?? {}) as Partial<TriggerSettings>
+  const gate = GATE_MODES.has(String(triggerRaw.gate)) ? triggerRaw.gate as TriggerSettings['gate'] : DEFAULT_TRIGGER_SETTINGS.gate
+  const writeGate = WRITE_GATE_MODES.has(String(triggerRaw.writeGate)) ? triggerRaw.writeGate as TriggerSettings['writeGate'] : DEFAULT_TRIGGER_SETTINGS.writeGate
+  const trigger: TriggerSettings = { ...DEFAULT_TRIGGER_SETTINGS, ...triggerRaw, gate, writeGate }
   const vaultRegistryFile = readLeaf<string>(src.vaultRegistryFile) ?? ''
-  return { semantic, vaultRegistryFile }
+  return { semantic, trigger, vaultRegistryFile }
 }
 
 // ---------- 运行时设置持有者（apply 注入；dispose 清空 → 测试与未挂载路径纯 env 行为不变） ----------
 
-let semanticSettings: SemanticSettings | undefined
+let resolvedConfig: KnjConfig | undefined
 
 /** apply() 挂载/热更新时写入；dispose 时清空（清空后一切读取回落到 env，与历史行为一致）。 */
-export function setSemanticSettings(settings: SemanticSettings | undefined): void {
-  semanticSettings = settings
+export function setResolvedConfig(config: KnjConfig | undefined): void {
+  resolvedConfig = config
 }
 
+export function getResolvedConfig(): KnjConfig | undefined {
+  return resolvedConfig
+}
+
+/** 语义/嵌入组切片（等价 resolved?.semantic；无面板时 undefined → 各处回落 env/内置默认）。 */
 export function getSemanticSettings(): SemanticSettings | undefined {
-  return semanticSettings
+  return resolvedConfig?.semantic
+}
+
+/** 触发/闸门组切片。 */
+export function getTriggerSettings(): TriggerSettings | undefined {
+  return resolvedConfig?.trigger
 }
 
 // ---------- 优先级解析：env 覆盖 > 设置面板 > 内置默认 ----------
@@ -132,7 +191,7 @@ const envText = (env: Record<string, string | undefined>, name: string): string 
  * 再问设置面板、最后落内置默认。测试直接传 env 对象时行为与纯 env 版逐字节一致。
  */
 export function effectiveEmbedConfig(env: Record<string, string | undefined> = process.env): RemoteEmbedConfig {
-  const panel = semanticSettings
+  const panel = getSemanticSettings()
   const providerRaw = envText(env, 'KNJ_OBSIDIAN_EMBED') || panel?.embed || 'local'
   const provider: RemoteEmbedConfig['provider'] =
     providerRaw === 'remote' ? 'remote' : providerRaw === 'off' ? 'off' : 'local'
@@ -151,19 +210,79 @@ export function effectiveEmbedConfig(env: Record<string, string | undefined> = p
 /** 语义兜底开关（KNJ_OBSIDIAN_SEMANTIC_FALLBACK / 面板 semanticFallback；默认开）。 */
 export function semanticFallbackOff(env: Record<string, string | undefined> = process.env): boolean {
   if (envText(env, 'KNJ_OBSIDIAN_SEMANTIC_FALLBACK').toLowerCase() === 'off') return true
-  return semanticSettings?.semanticFallback === false
+  return getSemanticSettings()?.semanticFallback === false
 }
 
 /** wiki_drill 开关（KNJ_OBSIDIAN_DRILL / 面板 drill；默认开）。 */
 export function drillOff(env: Record<string, string | undefined> = process.env): boolean {
   if (envText(env, 'KNJ_OBSIDIAN_DRILL').toLowerCase() === 'off') return true
-  return semanticSettings?.drill === false
+  return getSemanticSettings()?.drill === false
 }
 
 /** 语义自动刷新开关（KNJ_OBSIDIAN_AUTO_REFRESH / 面板 autoRefresh；默认开）。 */
 export function autoRefreshOff(env: Record<string, string | undefined> = process.env): boolean {
   if (envText(env, 'KNJ_OBSIDIAN_AUTO_REFRESH').toLowerCase() === 'off') return true
-  return semanticSettings?.autoRefresh === false
+  return getSemanticSettings()?.autoRefresh === false
+}
+
+// ---------- 触发/闸门组（第二批）：优先级同铁律，env 覆盖 > 面板 > 内置默认 ----------
+
+/** 总闸（KNJ_OBSIDIAN_TRIGGER / 面板 trigger.enabled；默认开——off 时 L0/L1/L3 全关）。 */
+export function triggerOff(env: Record<string, string | undefined> = process.env): boolean {
+  if (envText(env, 'KNJ_OBSIDIAN_TRIGGER').toLowerCase() === 'off') return true
+  return getTriggerSettings()?.enabled === false
+}
+
+/** L1 二档追投正文（KNJ_OBSIDIAN_TRIGGER_FULLTEXT / 面板 trigger.fulltext；默认开）。 */
+export function triggerFulltextOff(env: Record<string, string | undefined> = process.env): boolean {
+  if (envText(env, 'KNJ_OBSIDIAN_TRIGGER_FULLTEXT').toLowerCase() === 'off') return true
+  return getTriggerSettings()?.fulltext === false
+}
+
+/** L0 身份块注入（KNJ_OBSIDIAN_VAULT_IDENTITY / 面板 trigger.vaultIdentity；默认开）。 */
+export function vaultIdentityOff(env: Record<string, string | undefined> = process.env): boolean {
+  if (envText(env, 'KNJ_OBSIDIAN_VAULT_IDENTITY').toLowerCase() === 'off') return true
+  return getTriggerSettings()?.vaultIdentity === false
+}
+
+/** L3 失败复发提醒（KNJ_OBSIDIAN_TRIGGER_RECURRENCE / 面板 trigger.recurrence；默认开）。 */
+export function triggerRecurrenceOff(env: Record<string, string | undefined> = process.env): boolean {
+  if (envText(env, 'KNJ_OBSIDIAN_TRIGGER_RECURRENCE').toLowerCase() === 'off') return true
+  return getTriggerSettings()?.recurrence === false
+}
+
+/** 子代理会话触发（KNJ_OBSIDIAN_TRIGGER_SUBAGENT / 面板 trigger.subagent；默认开）。 */
+export function triggerSubagentOff(env: Record<string, string | undefined> = process.env): boolean {
+  if (envText(env, 'KNJ_OBSIDIAN_TRIGGER_SUBAGENT').toLowerCase() === 'off') return true
+  return getTriggerSettings()?.subagent === false
+}
+
+/** 未命中埋点（KNJ_OBSIDIAN_MISS_LOG / 面板 trigger.missLog；默认开）。 */
+export function missLogOff(env: Record<string, string | undefined> = process.env): boolean {
+  if (envText(env, 'KNJ_OBSIDIAN_MISS_LOG').toLowerCase() === 'off') return true
+  return getTriggerSettings()?.missLog === false
+}
+
+/**
+ * L2 高危合取门强度（KNJ_OBSIDIAN_GATE / 面板 trigger.gate；默认 off）。
+ * env 非空时按原语义解析（仅 warn/block 有效，其余一律 off）；env 空 → 面板；面板非法 → off。
+ */
+export function gateModeOf(env: Record<string, string | undefined> = process.env): 'off' | 'warn' | 'block' {
+  const raw = envText(env, 'KNJ_OBSIDIAN_GATE').toLowerCase()
+  if (raw !== '') return raw === 'warn' || raw === 'block' ? raw : 'off'
+  const panel = getTriggerSettings()?.gate
+  return panel === 'warn' || panel === 'block' ? panel : 'off'
+}
+
+/**
+ * 写入闸（KNJ_OBSIDIAN_WRITE_GATE / 面板 trigger.writeGate；默认 off，且这是刻意的：
+ * 开着会误伤用户自己点的 UI 蒸馏——与工具名相同的调用钩子分不清授权者）。
+ */
+export function writeGateModeOf(env: Record<string, string | undefined> = process.env): 'off' | 'ask' | 'block' {
+  const raw = envText(env, 'KNJ_OBSIDIAN_WRITE_GATE').toLowerCase()
+  if (raw !== '') return raw === 'ask' || raw === 'block' ? raw : 'off'
+  const panel = getTriggerSettings()?.writeGate
+  return panel === 'ask' || panel === 'block' ? panel : 'off'
 }
 
 // ---------- 非 loopback 设置 HTTP 通道（GET/POST /api/obsidian-wiki/config） ----------

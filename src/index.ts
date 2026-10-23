@@ -10,7 +10,7 @@ import { mountTools } from './tools.ts'
 import { mountWikiRoutes, type WikiHost } from './routes.ts'
 import { installTrigger, type TriggerHost } from './trigger.ts'
 import { mountSkillProvider } from './skill-provider.ts'
-import { KnjConfigSchema, resolveKnjConfig, setSemanticSettings, mountSettingsHttp, type KnjConfig } from './settings.ts'
+import { KnjConfigSchema, resolveKnjConfig, setResolvedConfig, mountSettingsHttp, type KnjConfig } from './settings.ts'
 import { disposeSemanticRuntimes } from './semantic-hits.ts'
 
 export const name = 'dsh-knj-obsidian'
@@ -39,13 +39,13 @@ export function apply(ctx: Context, rawConfig?: unknown): void {
   // ⓪ volatile 配置解包：volatile 字段以引用（{ get(): value }）形式提交进运行 fiber，
   //    这里统一解成普通值；loader/volatile-update 时重新解析并热应用。
   let config: KnjConfig = resolveKnjConfig(rawConfig)
-  setSemanticSettings(config.semantic)
+  setResolvedConfig(config)
   // 防御式注册：宿主必有 ctx.on，但测试夹具的 ctx 可能只有 inject——没有 on 就跳过热应用（不影响挂载）
   const withOn = ctx as unknown as { on?: (event: string, listener: () => void) => unknown }
   if (typeof withOn.on === 'function') {
     withOn.on('loader/volatile-update', () => {
       config = resolveKnjConfig(rawConfig)
-      setSemanticSettings(config.semantic)
+      setResolvedConfig(config)
       // 后端/开关可能已变：清掉按库缓存的语义运行时，下一次使用按新配置重建（local↔remote↔off 热切换）
       disposeSemanticRuntimes()
     })
@@ -88,7 +88,7 @@ export function apply(ctx: Context, rawConfig?: unknown): void {
       disposeTrigger()
       disposeSettingsHttp()
       disposeSkills()
-      setSemanticSettings(undefined)
+      setResolvedConfig(undefined)
     }
   })
 }

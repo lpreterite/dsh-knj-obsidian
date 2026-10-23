@@ -20,6 +20,11 @@ import { join, resolve } from 'node:path'
 import type { VaultStore } from './vault-store.ts'
 import type { WikiCategory, WikiPage } from './types.ts'
 import { semanticRawHits, toCandidateHints } from './semantic-hits.ts'
+import {
+  gateModeOf as settingsGateModeOf,
+  writeGateModeOf as settingsWriteGateModeOf,
+  triggerOff, triggerFulltextOff, triggerRecurrenceOff, triggerSubagentOff, vaultIdentityOff,
+} from './settings.ts'
 
 export interface TriggerCandidate {
   id: string
@@ -314,14 +319,15 @@ export function renderCaptureReminder(): string {
 
 /**
  * 开关：KNJ_OBSIDIAN_TRIGGER=off 时 L0/L1/L3/L5 全关（与 AUTO_REFRESH/SEMANTIC_FALLBACK 同族）。
+ * 优先级：env 覆盖 > 设置面板（trigger.enabled）> 默认开。
  */
 export function triggerEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return (env.KNJ_OBSIDIAN_TRIGGER ?? '').trim().toLowerCase() !== 'off'
+  return !triggerOff(env)
 }
 
 /** L3 复发提醒开关：`KNJ_OBSIDIAN_TRIGGER_RECURRENCE=off` 关闭。默认开（噪声最低的一层）。 */
 export function recurrenceEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return (env.KNJ_OBSIDIAN_TRIGGER_RECURRENCE ?? '').trim().toLowerCase() !== 'off'
+  return !triggerRecurrenceOff(env)
 }
 
 /**
@@ -329,7 +335,7 @@ export function recurrenceEnabled(env: Record<string, string | undefined> = proc
  * 默认开——「漏」是实测最痛的失败模式，二档正是它的直接对策。
  */
 export function fullTextStageEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return (env.KNJ_OBSIDIAN_TRIGGER_FULLTEXT ?? '').trim().toLowerCase() !== 'off'
+  return !triggerFulltextOff(env)
 }
 
 export interface SessionEventLike {
@@ -882,9 +888,7 @@ export type GateMode = 'off' | 'warn' | 'block'
  * 实测数据出来再定，否则等于拿拦截去掩盖一个根本没修好的检索问题。
  */
 export function gateModeOf(env: Record<string, string | undefined> = process.env): GateMode {
-  const raw = (env.KNJ_OBSIDIAN_GATE ?? '').trim().toLowerCase()
-  if (raw === 'warn' || raw === 'block') return raw
-  return 'off'
+  return settingsGateModeOf(env)
 }
 
 /**
@@ -1005,10 +1009,7 @@ export function renderGateReminder(target: string): string {
  * 写入侧就不该再加拦截；这道闸只作为**显式 opt-in**保留（`=ask` / `=block`）。
  */
 export function writeGateModeOf(env: Record<string, string | undefined> = process.env): 'ask' | 'block' | 'off' {
-  const raw = (env.KNJ_OBSIDIAN_WRITE_GATE ?? '').trim().toLowerCase()
-  if (raw === 'ask') return 'ask'
-  if (raw === 'block') return 'block'
-  return 'off'
+  return settingsWriteGateModeOf(env)
 }
 
 /**
@@ -1130,7 +1131,7 @@ export function taskSeqOfSummary(summary: string, prefix: string): number | null
  * 默认开——子代理同样需要知识（且提醒本身不阻断）；噪声明显时用这个开关收敛。
  */
 export function subagentTriggerEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return (env.KNJ_OBSIDIAN_TRIGGER_SUBAGENT ?? '').trim().toLowerCase() !== 'off'
+  return !triggerSubagentOff(env)
 }
 
 /** 会话的委派深度（宿主 SessionHeader.delegationDepth；顶层会话为 0）。 */
@@ -1159,7 +1160,7 @@ export function sessionCwdOf(session: unknown): string {
 
 /** L0 身份块开关：`KNJ_OBSIDIAN_VAULT_IDENTITY=off` 关闭（注入量极小的增益层，默认开）。 */
 export function vaultIdentityEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return (env.KNJ_OBSIDIAN_VAULT_IDENTITY ?? '').trim().toLowerCase() !== 'off'
+  return !vaultIdentityOff(env)
 }
 
 /**
