@@ -3,11 +3,12 @@ import { fetchCheckpoints, fetchVaults, restoreCheckpoint, type CheckpointMeta }
 import { IconCopy, IconSparkles } from './icons.tsx'
 import { SemanticIndexPanel } from './SemanticIndexPanel.tsx'
 
-/** 蒸馏范围：代码侧（enum/db）走 wiki-collect；capability=系统功能挖掘（预留：3 skill 组合）；
+/** 蒸馏范围：代码侧（enum/db）走 wiki-collect；docs=文档蒸馏（wiki-docs：用户圈定路径，提炼文本文档）；
+ *  capability=系统功能挖掘（预留：3 skill 组合）；
  *  sessions=会话蒸馏——**单一入口**：默认按时间范围蒸当前工作区，也可复选指定会话只蒸所选
  *  （二者曾是两个并列选项「近期会话蒸馏 / 指定会话蒸馏」，合并后由"有没有勾选会话"决定走哪条，
  *  避免用户为了同一件事在两个入口之间选择）。均走 wiki-distill。 */
-export type DistillScope = 'enum' | 'db' | 'both' | 'sessions'
+export type DistillScope = 'enum' | 'db' | 'both' | 'docs' | 'sessions'
 export type DistillRange = '3' | '7' | '30'
 
 /** 宿主会话服务的最小结构面（仅取列表；缺失时降级为手填 session id）。 */
@@ -47,6 +48,11 @@ const MAX_RENDERED_SESSIONS = 50
 const SCOPE_LABELS: Array<{ value: DistillScope; label: string; detail: string; reserved?: boolean }> = [
   { value: 'enum', label: '枚举/常量字典', detail: 'Java enum + public static final 常量 → dictionaries' },
   { value: 'db', label: '表结构', detail: 'SQL DDL / MyBatis XML / JPA Entity → tables' },
+  {
+    value: 'docs',
+    label: '文档蒸馏',
+    detail: '项目内文本文档（设计文档、README、纪要、runbook 等）→ 提炼成知识页。选中后在下方填写路径或通配（如 docs/、README.md）',
+  },
   {
     value: 'both',
     label: '系统功能挖掘',
@@ -105,6 +111,21 @@ function buildCollectTrigger(scope: 'enum' | 'db' | 'both'): string {
   ].join('\n')
 }
 
+/** 文档蒸馏指令（引用内置 wiki-docs skill；对象路径由用户圈定，插件不擅自全库扫描）。 */
+function buildDocsTrigger(target: string): string {
+  return [
+    '请使用内置 wiki-docs skill 把下列项目文档提炼进知识库：',
+    `目标 = ${target}（相对当前工作区/库根；仅此范围，不得擅自扩大到未点名的目录）。`,
+    '步骤：盘点候选文件并报数（逐个列路径与格式）→ 逐文件通读提炼 → wiki_query 查重 → 入库。',
+    '入库 source = `file:<相对路径>`，contentHash = 源文件字节 SHA-256（文件未变重跑自动跳过，天然幂等）；',
+    '单文档结论页 category=references，跨文档综合页 category=synthesis；矛盾与跨文档归纳标 inferred，不得写成事实。',
+    '边界：只处理文本可读内容（Markdown/txt/rst/adoc/源码注释等）；pdf/图片/office 等二进制不支持、不做解析，列入报告「不支持」；',
+    '源文件只读；不读 .dsh 会话归档、.wiki/_system/、node_modules/、.git/。',
+    BATCH_DISCIPLINE,
+    '完成后按第 5 步格式输出质量评估报告（含逐文件产出明细与跳过/不支持清单）。',
+  ].join('\n')
+}
+
 /** 近期会话蒸馏指令（引用内置 wiki-distill skill，按时间范围；限定当前工作区）。 */
 function buildDistillTrigger(range: DistillRange, vaultRoot?: string | null): string {
   return [
@@ -152,6 +173,7 @@ export function KnowledgeDistillLauncher({ startAgentSession, sessions, workspac
   const [range, setRange] = useState<DistillRange>('3')
   const [sessionIds, setSessionIds] = useState<string[]>([])
   const [manualIds, setManualIds] = useState('')
+  const [docsPath, setDocsPath] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState('')
@@ -306,7 +328,15 @@ export function KnowledgeDistillLauncher({ startAgentSession, sessions, workspac
       return
     }
     let text: string
-    if (scope === 'sessions') {
+    if (scope === 'docs') {
+      // 文档蒸馏：对象必须由用户圈定（路径或通配）；空路径宁可不发指令，也不让 agent 全库扫描
+      const target = docsPath.trim()
+      if (!target) {
+        setMessage('请先在下方填写要蒸馏的文档路径或通配（相对当前工作区，如 docs/、README.md）：文档蒸馏的对象必须由你圈定。')
+        return
+      }
+      text = buildDocsTrigger(target)
+    } else if (scope === 'sessions') {
       // 合并后的单一入口：勾了会话就只蒸所选（忽略时间范围），没勾就按时间范围蒸当前工作区。
       // 这样「蒸馏近期」与「蒸馏指定会话」不再是两个要用户二选一的入口。
       text = effectiveIds.length > 0
@@ -322,19 +352,22 @@ export function KnowledgeDistillLauncher({ startAgentSession, sessions, workspac
     }
     const okText = scope === 'sessions'
       ? '已新建会话并预填指令：切到该新会话后回车发送，Agent 会用 wiki-distill 蒸馏并入库。'
-      : '已新建会话并预填指令：切到该新会话后回车发送，Agent 会用 wiki-collect 采集并直接入库。'
+      : scope === 'docs'
+        ? '已新建会话并预填指令：切到该新会话后回车发送，Agent 会用 wiki-docs 提炼文档并入库。'
+        : '已新建会话并预填指令：切到该新会话后回车发送，Agent 会用 wiki-collect 采集并直接入库。'
     await send(text, okText)
   }
 
   return <div className="knj-vcol" style={{ padding: 12, gap: 10 }}>
     <div className="knj-banner knj-banner--info">
-      <span><strong>知识蒸馏</strong>：把当前工作区的代码结构或会话沉淀成知识页。
+      <span><strong>知识蒸馏</strong>：把当前工作区的代码结构、文档或会话沉淀成知识页。
         选择范围后点击，触发指令会交给当前对话 Agent——代码结构走 <code>wiki-collect</code> skill，
-        会话蒸馏走 <code>wiki-distill</code> skill，两者都经 <code>wiki_ingest</code> 入库。
-        本视图不产生草稿状态，也不直接写库。</span>
+        文档蒸馏走 <code>wiki-docs</code> skill，会话蒸馏走 <code>wiki-distill</code> skill，
+        三者都经 <code>wiki_ingest</code> 入库。本视图不产生草稿状态，也不直接写库。</span>
     </div>
     <div className="knj-pop__hint">代码侧支持：Java enum、Java public static final、SQL DDL、MyBatis XML、JPA Entity；
       不支持：TypeScript、Python、Go、任意 ORM、JSON Schema。
+      <br />文档侧：只处理文本可读内容（Markdown/txt/rst/adoc/源码注释）；pdf、图片、office 等二进制不支持。
       <br />会话侧：原始归档只写入 <code>&lt;vault&gt;/_system/dsh-sessions/</code>，不读取其他工作区会话、不参与知识检索。</div>
 
     {initialized !== true && (
@@ -375,6 +408,16 @@ export function KnowledgeDistillLauncher({ startAgentSession, sessions, workspac
     {scope === 'both' && (
       <div className="knj-banner knj-banner--warn">
         <span><strong>预留，暂不可用</strong>：{RESERVED_NOTICE}</span>
+      </div>
+    )}
+
+    {scope === 'docs' && (
+      <div className="knj-vcol" style={{ gap: 6 }}>
+        <input className="knj-input" value={docsPath} onChange={(e) => setDocsPath(e.target.value)}
+          placeholder="文档路径或通配（相对当前工作区）：如 docs/ 、README.md 、docs/**/*.md" spellCheck={false} />
+        <span className="knj-pop__hint">
+          蒸馏对象由你圈定：留空不会发起指令（防止 agent 擅自全库扫描）。单批建议 ≤20 个文件，大目录分批跑。
+        </span>
       </div>
     )}
 

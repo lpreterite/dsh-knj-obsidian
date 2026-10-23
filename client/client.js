@@ -6064,6 +6064,11 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 				detail: "SQL DDL / MyBatis XML / JPA Entity → tables"
 			},
 			{
+				value: "docs",
+				label: "文档蒸馏",
+				detail: "项目内文本文档（设计文档、README、纪要、runbook 等）→ 提炼成知识页。选中后在下方填写路径或通配（如 docs/、README.md）"
+			},
+			{
 				value: "both",
 				label: "系统功能挖掘",
 				detail: "预留：由 3 个 skill 组合完成（代码结构 → 关系/调用 → 功能聚合），本机暂未安装这些 skill",
@@ -6122,6 +6127,20 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 				"完成后按第 5 步格式输出质量评估报告。"
 			].join("\n");
 		}
+		/** 文档蒸馏指令（引用内置 wiki-docs skill；对象路径由用户圈定，插件不擅自全库扫描）。 */
+		function buildDocsTrigger(target) {
+			return [
+				"请使用内置 wiki-docs skill 把下列项目文档提炼进知识库：",
+				`目标 = ${target}（相对当前工作区/库根；仅此范围，不得擅自扩大到未点名的目录）。`,
+				"步骤：盘点候选文件并报数（逐个列路径与格式）→ 逐文件通读提炼 → wiki_query 查重 → 入库。",
+				"入库 source = `file:<相对路径>`，contentHash = 源文件字节 SHA-256（文件未变重跑自动跳过，天然幂等）；",
+				"单文档结论页 category=references，跨文档综合页 category=synthesis；矛盾与跨文档归纳标 inferred，不得写成事实。",
+				"边界：只处理文本可读内容（Markdown/txt/rst/adoc/源码注释等）；pdf/图片/office 等二进制不支持、不做解析，列入报告「不支持」；",
+				"源文件只读；不读 .dsh 会话归档、.wiki/_system/、node_modules/、.git/。",
+				BATCH_DISCIPLINE,
+				"完成后按第 5 步格式输出质量评估报告（含逐文件产出明细与跳过/不支持清单）。"
+			].join("\n");
+		}
 		/** 近期会话蒸馏指令（引用内置 wiki-distill skill，按时间范围；限定当前工作区）。 */
 		function buildDistillTrigger(range, vaultRoot) {
 			return [
@@ -6162,6 +6181,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			const [range, setRange] = (0, react.useState)("3");
 			const [sessionIds, setSessionIds] = (0, react.useState)([]);
 			const [manualIds, setManualIds] = (0, react.useState)("");
+			const [docsPath, setDocsPath] = (0, react.useState)("");
 			const [pickerOpen, setPickerOpen] = (0, react.useState)(false);
 			const [query, setQuery] = (0, react.useState)("");
 			const [message, setMessage] = (0, react.useState)("");
@@ -6324,7 +6344,14 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 					return;
 				}
 				let text;
-				if (scope === "sessions") text = effectiveIds.length > 0 ? buildSelectedSessionsTrigger(effectiveIds, vaultRoot) : buildDistillTrigger(range, vaultRoot);
+				if (scope === "docs") {
+					const target = docsPath.trim();
+					if (!target) {
+						setMessage("请先在下方填写要蒸馏的文档路径或通配（相对当前工作区，如 docs/、README.md）：文档蒸馏的对象必须由你圈定。");
+						return;
+					}
+					text = buildDocsTrigger(target);
+				} else if (scope === "sessions") text = effectiveIds.length > 0 ? buildSelectedSessionsTrigger(effectiveIds, vaultRoot) : buildDistillTrigger(range, vaultRoot);
 				else text = buildCollectTrigger(scope);
 				if (copyOnly) {
 					try {
@@ -6333,7 +6360,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 					setMessage("触发指令已复制到剪贴板，请粘贴到对话发送给 Agent（未创建新会话）。");
 					return;
 				}
-				await send(text, scope === "sessions" ? "已新建会话并预填指令：切到该新会话后回车发送，Agent 会用 wiki-distill 蒸馏并入库。" : "已新建会话并预填指令：切到该新会话后回车发送，Agent 会用 wiki-collect 采集并直接入库。");
+				await send(text, scope === "sessions" ? "已新建会话并预填指令：切到该新会话后回车发送，Agent 会用 wiki-distill 蒸馏并入库。" : scope === "docs" ? "已新建会话并预填指令：切到该新会话后回车发送，Agent 会用 wiki-docs 提炼文档并入库。" : "已新建会话并预填指令：切到该新会话后回车发送，Agent 会用 wiki-collect 采集并直接入库。");
 			};
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: "knj-vcol",
@@ -6346,19 +6373,23 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 						className: "knj-banner knj-banner--info",
 						children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
 							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "知识蒸馏" }),
-							"：把当前工作区的代码结构或会话沉淀成知识页。 选择范围后点击，触发指令会交给当前对话 Agent——代码结构走 ",
+							"：把当前工作区的代码结构、文档或会话沉淀成知识页。 选择范围后点击，触发指令会交给当前对话 Agent——代码结构走 ",
 							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("code", { children: "wiki-collect" }),
-							" skill， 会话蒸馏走 ",
+							" skill， 文档蒸馏走 ",
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("code", { children: "wiki-docs" }),
+							" skill，会话蒸馏走 ",
 							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("code", { children: "wiki-distill" }),
-							" skill，两者都经 ",
+							" skill， 三者都经 ",
 							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("code", { children: "wiki_ingest" }),
-							" 入库。 本视图不产生草稿状态，也不直接写库。"
+							" 入库。本视图不产生草稿状态，也不直接写库。"
 						] })
 					}),
 					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 						className: "knj-pop__hint",
 						children: [
 							"代码侧支持：Java enum、Java public static final、SQL DDL、MyBatis XML、JPA Entity； 不支持：TypeScript、Python、Go、任意 ORM、JSON Schema。",
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("br", {}),
+							"文档侧：只处理文本可读内容（Markdown/txt/rst/adoc/源码注释）；pdf、图片、office 等二进制不支持。",
 							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("br", {}),
 							"会话侧：原始归档只写入 ",
 							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("code", { children: "<vault>/_system/dsh-sessions/" }),
@@ -6446,6 +6477,20 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 							"：",
 							RESERVED_NOTICE
 						] })
+					}),
+					scope === "docs" && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						className: "knj-vcol",
+						style: { gap: 6 },
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("input", {
+							className: "knj-input",
+							value: docsPath,
+							onChange: (e) => setDocsPath(e.target.value),
+							placeholder: "文档路径或通配（相对当前工作区）：如 docs/ 、README.md 、docs/**/*.md",
+							spellCheck: false
+						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+							className: "knj-pop__hint",
+							children: "蒸馏对象由你圈定：留空不会发起指令（防止 agent 擅自全库扫描）。单批建议 ≤20 个文件，大目录分批跑。"
+						})]
 					}),
 					scope === "sessions" && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 						className: "knj-pop__row",
